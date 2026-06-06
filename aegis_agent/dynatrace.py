@@ -183,12 +183,16 @@ class DynatraceMcpClient:
         schema = self._tool_schemas.get(tool_name, {})
         properties = schema.get("properties", {})
         args: dict[str, Any] = {}
-        for candidate in ("query", "dql", "statement", "text"):
+        # dynatrace-mcp-server uses `dqlStatement`; keep older names as fallbacks.
+        for candidate in ("dqlStatement", "query", "dql", "statement", "text"):
             if candidate in properties:
                 args[candidate] = query
                 break
         if not args:
-            args["query"] = query
+            # Last resort: if there is exactly one required string property, use it.
+            required = schema.get("required") or []
+            string_props = [p for p in required if properties.get(p, {}).get("type") == "string"]
+            args[string_props[0] if len(string_props) == 1 else "dqlStatement"] = query
         if "from" in properties and "from" not in args:
             args["from"] = f"-{self._config.burn_window_seconds}s"
         if "to" in properties and "to" not in args:
