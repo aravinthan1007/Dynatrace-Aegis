@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from textwrap import dedent
 from typing import Any
 
@@ -17,6 +18,7 @@ except ImportError:  # pragma: no cover - depends on ADK version
 from .actions import get_service_metrics
 from .actions import open_github_pr
 from .actions import post_slack
+from .actions import reset_metrics
 from .actions import set_hardening
 from .actions import write_scorecard
 from .config import get_config
@@ -281,16 +283,20 @@ def verify_after_fix(context: dict[str, Any]) -> dict[str, Any]:
     absorb) and expects the burn to stay under the abort threshold = PASSED.
     """
 
+    # Clear the burn window so verify reflects only the hardened behavior, then
+    # let a little clean traffic accumulate before injecting failures.
+    reset = reset_metrics(config=config)
     event_bus.publish(
         {
             "type": "reasoning",
             "phase": "verify",
             "text": (
-                f"Verifying the fix: re-running {context['target']} with injected "
-                f"error_rate={config.verify_error_rate} against the hardened client."
+                f"Cleared burn window ({reset.get('status')}). Re-running {context['target']} "
+                f"with injected error_rate={config.verify_error_rate} against the hardened client."
             ),
         }
     )
+    time.sleep(config.verify_warmup_seconds)
     result = run_experiment_tool(
         target=context["target"],
         latency_ms=0,

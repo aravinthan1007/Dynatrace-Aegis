@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from .chaos import get_chaos_state
 from .chaos import get_hardened
 from .chaos import record_request
+from .chaos import reset_samples
 from .chaos import set_chaos_state
 from .chaos import set_hardened
 from .chaos import summarize_recent
@@ -146,3 +147,8 @@ async def recent_metrics(
     threshold_ms: int = 500,
 ) -> dict:
     return summarize_recent(service, window_seconds, threshold_ms)
+
+
+@app.post("/metrics/reset")
+async def metrics_reset() -> dict:
+    return reset_samples()

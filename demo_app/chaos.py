@@ -91,6 +91,19 @@ async def apply_payment_to_store_chaos() -> None:
         raise HTTPException(status_code=503, detail="Injected dependency failure")
 
 
+def reset_samples() -> dict[str, Any]:
+    """Clear the recent-request buffer so the burn window starts clean.
+
+    Used before the verify-after-fix run so its burn reflects only the hardened
+    behavior, not leftover bad samples from the abort run still inside the window.
+    """
+
+    with _samples_lock:
+        cleared = len(_recent_samples)
+        _recent_samples.clear()
+    return {"cleared": cleared}
+
+
 def record_request(service: str, duration_ms: float, ok: bool) -> None:
     with _samples_lock:
         _recent_samples.append(

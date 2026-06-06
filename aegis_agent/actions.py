@@ -64,6 +64,19 @@ def set_hardening(enabled: bool, *, config: AegisConfig | None = None) -> dict[s
         return {"status": "dry-run", "detail": str(exc), "hardened": enabled}
 
 
+def reset_metrics(*, config: AegisConfig | None = None) -> dict[str, Any]:
+    """Clear the demo app's recent-request window (best-effort)."""
+
+    config = config or get_config()
+    try:
+        with httpx.Client(timeout=10) as client:
+            response = client.post(f"{config.demo_app_url}/metrics/reset")
+            response.raise_for_status()
+            return {"status": "reset", **response.json()}
+    except Exception as exc:
+        return {"status": "dry-run", "detail": str(exc)}
+
+
 def get_service_metrics(service: str, *, config: AegisConfig | None = None) -> dict[str, Any]:
     """Fetch recent measured stats for a demo-app service (best-effort)."""
 
