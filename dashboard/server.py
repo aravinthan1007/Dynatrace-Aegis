@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from aegis_agent.agent import run_aegis_game_day
+from aegis_agent.agent import run_with_adk
 from aegis_agent.config import get_config
 from aegis_agent.dynatrace import fetch_burn_rate
 from aegis_agent.events import event_bus
@@ -94,3 +95,18 @@ async def run_demo() -> dict:
         }
     )
     return {"status": "started"}
+
+
+@app.post("/run-agent")
+async def run_agent() -> dict:
+    """Run the game day through the Google ADK Runner (Gemini drives the tools)."""
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(None, run_with_adk)
+    event_bus.publish(
+        {
+            "type": "reasoning",
+            "phase": "init",
+            "text": "Aegis game day started via Google ADK. Waiting for approval before fault injection.",
+        }
+    )
+    return {"status": "started", "engine": "google-adk"}

@@ -413,6 +413,95 @@ def run_aegis_game_day() -> dict[str, Any]:
     }
 
 
+def run_with_adk() -> dict[str, Any]:
+    """Execute the game day through the Google ADK Runner (Gemini drives the tools).
+
+    Gemini, running on Vertex AI, decides to call the `run_aegis_game_day` tool; the
+    deterministic safety loop still lives inside that tool. If ADK/Vertex is not
+    available at runtime, we fall back to the deterministic workflow so the live demo
+    never breaks.
+    """
+
+    import asyncio
+
+    try:
+        from google.genai import types
+
+        try:
+            from google.adk.runners import InMemoryRunner
+
+            runner = InMemoryRunner(agent=root_agent, app_name="aegis")
+        except Exception:
+            from google.adk.runners import Runner
+            from google.adk.sessions import InMemorySessionService
+
+            runner = Runner(
+                agent=root_agent, app_name="aegis", session_service=InMemorySessionService()
+            )
+
+        event_bus.publish(
+            {
+                "type": "reasoning",
+                "phase": "adk",
+                "text": "Starting Aegis via the Google ADK Runner — Gemini (Vertex AI) is now driving the tools.",
+            }
+        )
+
+        async def _go() -> None:
+            session = await runner.session_service.create_session(
+                app_name="aegis", user_id="dashboard"
+            )
+            message = types.Content(
+                role="user",
+                parts=[
+                    types.Part(
+                        text=(
+                            "Run a complete Aegis resilience game day now by calling the "
+                            "run_aegis_game_day tool, then briefly summarize the pre-fix and "
+                            "post-fix verdicts."
+                        )
+                    )
+                ],
+            )
+            final_text = None
+            async for ev in runner.run_async(
+                user_id="dashboard", session_id=session.id, new_message=message
+            ):
+                try:
+                    if ev.content and ev.content.parts:
+                        for part in ev.content.parts:
+                            fc = getattr(part, "function_call", None)
+                            if fc is not None:
+                                event_bus.publish(
+                                    {
+                                        "type": "reasoning",
+                                        "phase": "adk",
+                                        "text": f"Gemini (ADK) → calling tool: {fc.name}",
+                                    }
+                                )
+                            if getattr(part, "text", None):
+                                final_text = part.text
+                except Exception:
+                    pass
+            if final_text:
+                event_bus.publish(
+                    {"type": "reasoning", "phase": "adk", "text": f"Gemini (ADK) summary: {final_text[:400]}"}
+                )
+
+        asyncio.run(_go())
+        return {"status": "completed", "engine": "google-adk"}
+    except Exception as exc:  # pragma: no cover - depends on runtime creds
+        event_bus.publish(
+            {
+                "type": "message",
+                "level": "warning",
+                "source": "adk",
+                "text": f"ADK Runner unavailable ({exc}); running the deterministic workflow instead.",
+            }
+        )
+        return run_aegis_game_day()
+
+
 INSTRUCTION = dedent(
     """
     You are Aegis, an autonomous resilience game-day agent for Dynatrace.

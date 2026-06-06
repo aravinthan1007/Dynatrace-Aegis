@@ -3,315 +3,337 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Aegis Dashboard</title>
+    <title>Aegis — Autonomous Resilience Game-Day Agent</title>
     <style>
       :root {
         --bg: #07131e;
         --panel: rgba(10, 24, 37, 0.84);
-        --panel-border: rgba(157, 197, 255, 0.15);
+        --panel-border: rgba(157, 197, 255, 0.16);
         --text: #e9f2ff;
         --muted: #93a9bf;
         --accent: #7be0b7;
+        --accent2: #8cb8ff;
         --warn: #ff6f61;
         --line: #7ec8ff;
         --threshold: #f7c948;
+        --ok: #7be0b7;
+        --bad: #ff6f61;
       }
-
-      * {
-        box-sizing: border-box;
-      }
-
+      * { box-sizing: border-box; }
       body {
-        margin: 0;
-        min-height: 100vh;
-        font-family: "Segoe UI", "Avenir Next", sans-serif;
-        color: var(--text);
+        margin: 0; min-height: 100vh; color: var(--text);
+        font-family: "Segoe UI", "Avenir Next", system-ui, sans-serif;
         background:
-          radial-gradient(circle at top left, rgba(45, 115, 255, 0.25), transparent 30%),
-          radial-gradient(circle at bottom right, rgba(123, 224, 183, 0.14), transparent 30%),
+          radial-gradient(circle at top left, rgba(45,115,255,0.22), transparent 32%),
+          radial-gradient(circle at bottom right, rgba(123,224,183,0.12), transparent 32%),
           linear-gradient(160deg, #041018 0%, #07131e 45%, #0a1b28 100%);
       }
-
-      .shell {
-        display: grid;
-        grid-template-columns: 1.1fr 0.9fr;
-        gap: 20px;
-        padding: 24px;
+      a { color: var(--accent2); }
+      .topbar {
+        display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+        padding: 18px 24px; border-bottom: 1px solid var(--panel-border);
       }
-
-      .panel {
-        background: var(--panel);
-        border: 1px solid var(--panel-border);
-        border-radius: 20px;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
-        overflow: hidden;
+      .brand { display: flex; flex-direction: column; }
+      .brand h1 { margin: 0; font-size: 1.15rem; letter-spacing: 0.04em; }
+      .brand p { margin: 2px 0 0; color: var(--muted); font-size: 0.82rem; }
+      .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+      .badge {
+        font-size: 0.72rem; padding: 6px 10px; border-radius: 999px;
+        background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color: var(--muted);
+        white-space: nowrap;
       }
+      .badge b { color: var(--text); font-weight: 600; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; background: var(--muted); }
+      .dot.live { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+      .dot.fallback { background: var(--threshold); }
 
-      .panel-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 18px 20px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      }
-
-      .panel-header h1,
-      .panel-header h2 {
-        margin: 0;
-        font-size: 1rem;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-      }
-
-      .subtle {
-        color: var(--muted);
-        font-size: 0.9rem;
-      }
-
-      .controls {
-        display: flex;
-        gap: 12px;
-        padding: 16px 20px;
-      }
-
+      .controls { display: flex; gap: 12px; padding: 18px 24px 6px; align-items: center; flex-wrap: wrap; }
       button {
-        border: 0;
-        border-radius: 999px;
-        padding: 12px 18px;
-        color: #041018;
+        border: 0; border-radius: 999px; padding: 12px 20px; color: #041018; font-weight: 700; cursor: pointer;
         background: linear-gradient(135deg, var(--accent), #a7f3d0);
-        font-weight: 700;
-        cursor: pointer;
       }
+      button.secondary { background: linear-gradient(135deg, #d8e7ff, var(--accent2)); }
+      button:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.4); }
+      button.pulse { animation: pulse 1.1s infinite; }
+      @keyframes pulse { 0%,100%{ box-shadow: 0 0 0 0 rgba(123,224,183,0.6);} 50%{ box-shadow: 0 0 0 10px rgba(123,224,183,0);} }
+      .hint { color: var(--muted); font-size: 0.85rem; }
 
-      button.secondary {
-        background: linear-gradient(135deg, #d8e7ff, #8cb8ff);
+      /* Pipeline stepper */
+      .pipeline { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; padding: 12px 24px 4px; }
+      .step {
+        position: relative; padding: 12px; border-radius: 14px; background: rgba(255,255,255,0.035);
+        border: 1px solid var(--panel-border); min-height: 92px;
       }
+      .step .num { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.1em; }
+      .step .label { font-weight: 700; margin-top: 4px; font-size: 0.92rem; }
+      .step .sub { color: var(--muted); font-size: 0.76rem; margin-top: 6px; min-height: 28px; }
+      .step.active { border-color: var(--accent2); background: rgba(140,184,255,0.10); }
+      .step.done { border-color: var(--ok); }
+      .step.done .label::after { content: " ✓"; color: var(--ok); }
+      .step.failed { border-color: var(--bad); background: rgba(255,111,97,0.12); }
+      .step.active .num { color: var(--accent2); }
 
-      .feed {
-        height: calc(100vh - 170px);
-        overflow: auto;
-        padding: 0 20px 20px;
-      }
+      .grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 18px; padding: 14px 24px 28px; }
+      @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } .pipeline { grid-template-columns: repeat(3,1fr);} }
+      .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 18px; overflow: hidden; }
+      .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+      .panel-header h2 { margin: 0; font-size: 0.92rem; letter-spacing: 0.06em; text-transform: uppercase; }
+      .panel-body { padding: 16px 18px; }
 
-      .event {
-        margin: 14px 0;
-        padding: 14px 16px;
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-      }
+      .verdicts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+      .verdict { padding: 14px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--panel-border); }
+      .verdict .t { color: var(--muted); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.08em; }
+      .verdict .v { font-size: 1.4rem; font-weight: 800; margin-top: 6px; }
+      .verdict .v.bad { color: var(--bad); }
+      .verdict .v.ok { color: var(--ok); }
+      .verdict .pk { color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
 
-      .event small {
-        color: var(--muted);
-        display: block;
-        margin-bottom: 8px;
-      }
+      #chartTitle { font-size: 0.82rem; color: var(--muted); margin: 0 0 8px; }
+      canvas { width: 100%; height: 260px; background: rgba(0,0,0,0.18); border-radius: 14px; }
+      .legend { display: flex; gap: 16px; margin-top: 10px; font-size: 0.78rem; color: var(--muted); flex-wrap: wrap; }
+      .legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+      .legend .l-burn::before { background: var(--line); }
+      .legend .l-thr::before { background: var(--threshold); }
+      .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-top: 12px; }
+      .stat { padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.04); }
+      .stat small { color: var(--muted); }
+      .stat strong { display: block; font-size: 1.3rem; margin-top: 6px; }
 
-      .chart-wrap {
-        padding: 18px 20px 20px;
-      }
+      table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+      th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+      th { color: var(--muted); font-weight: 600; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; }
+      tr.chosen { background: rgba(123,224,183,0.10); }
+      tr.chosen td:first-child::after { content: " ◄ target"; color: var(--ok); font-size: 0.72rem; }
 
-      #abortBanner {
-        display: none;
-        margin: 16px 20px 0;
-        padding: 16px;
-        border-radius: 16px;
-        background: linear-gradient(135deg, rgba(255, 111, 97, 0.95), rgba(199, 32, 62, 0.92));
-        color: white;
-        font-weight: 800;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
-
-      canvas {
-        width: 100%;
-        height: 320px;
-        background: rgba(0, 0, 0, 0.15);
-        border-radius: 16px;
-      }
-
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 12px;
-        margin-top: 16px;
-      }
-
-      .stat {
-        padding: 14px;
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.04);
-      }
-
-      .stat strong {
-        display: block;
-        font-size: 1.5rem;
-        margin-top: 8px;
-      }
-
-      @media (max-width: 900px) {
-        .shell {
-          grid-template-columns: 1fr;
-        }
-
-        .feed {
-          height: 420px;
-        }
-      }
+      .feed { height: 300px; overflow: auto; }
+      .event { margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); }
+      .event .tag { display: inline-block; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 999px; background: rgba(140,184,255,0.18); color: var(--accent2); margin-bottom: 6px; }
+      .event .tag.abort { background: rgba(255,111,97,0.2); color: var(--bad); }
+      .event .tag.warn { background: rgba(247,201,72,0.18); color: var(--threshold); }
+      .event .txt { font-size: 0.88rem; line-height: 1.35; }
+      #abortBanner { display: none; margin: 0 0 12px; padding: 12px; border-radius: 12px; text-align: center;
+        background: linear-gradient(135deg, rgba(255,111,97,0.95), rgba(199,32,62,0.92)); color: #fff; font-weight: 800; letter-spacing: 0.06em; }
+      .explainer { padding: 0 24px; color: var(--muted); font-size: 0.86rem; max-width: 900px; }
     </style>
   </head>
   <body>
-    <div class="shell">
+    <div class="topbar">
+      <div class="brand">
+        <h1>Aegis — Autonomous Resilience Game-Day Agent</h1>
+        <p>Finds the riskiest dependency, runs a safe chaos experiment, and proves the fix — with a deterministic safety brake.</p>
+      </div>
+      <div class="badges">
+        <span class="badge"><b>Google ADK</b> + Gemini</span>
+        <span class="badge"><span class="dot" id="dtDot"></span><b>Dynatrace</b> <span id="dtMode">checking…</span></span>
+        <span class="badge"><span class="dot" id="connDot"></span><span id="connText">connecting…</span></span>
+      </div>
+    </div>
+
+    <p class="explainer">
+      Click <b>Run Game Day</b>. Aegis ranks live service dependencies, asks you to <b>approve</b>,
+      then injects latency and watches the error-budget <b>burn rate</b>. A plain-Python safety loop
+      <b>auto-aborts</b> the moment burn crosses the threshold — then Aegis opens a hardening PR, applies the
+      fix, and <b>re-runs to prove it holds</b>.
+    </p>
+
+    <div class="controls">
+      <button id="runButton">▶ Run Game Day</button>
+      <button class="secondary" id="approveButton" disabled>✋ Approve Injection</button>
+      <span class="hint" id="statusText">Idle — ready to run.</span>
+    </div>
+
+    <div class="pipeline" id="pipeline"></div>
+
+    <div class="grid">
       <section class="panel">
-        <div class="panel-header">
-          <h1>Aegis Reasoning Feed</h1>
-          <span class="subtle" id="statusText">Idle</span>
+        <div class="panel-header"><h2>Error-budget burn</h2><span class="hint" id="chartPhase">—</span></div>
+        <div class="panel-body">
+          <div id="abortBanner">⛔ DETERMINISTIC ABORT — fault rolled back</div>
+          <p id="chartTitle">Waiting for the experiment to start…</p>
+          <canvas id="chart" width="720" height="260"></canvas>
+          <div class="legend"><span class="l-burn">burn rate</span><span class="l-thr">abort threshold</span></div>
+          <div class="stats">
+            <div class="stat"><small>Current burn</small><strong id="burnValue">—</strong></div>
+            <div class="stat"><small>Abort threshold</small><strong id="thresholdValue">—</strong></div>
+            <div class="stat"><small>Samples</small><strong id="sampleValue">0</strong></div>
+          </div>
         </div>
-        <div class="controls">
-          <button id="runButton">Run Game Day</button>
-          <button class="secondary" id="approveButton">Approve Injection</button>
-        </div>
-        <div class="feed" id="feed"></div>
       </section>
 
       <section class="panel">
-        <div class="panel-header">
-          <h2>Live Burn Rate</h2>
-          <span class="subtle">Deterministic auto-abort</span>
-        </div>
-        <div id="abortBanner">Abort triggered</div>
-        <div class="chart-wrap">
-          <canvas id="chart" width="700" height="320"></canvas>
-          <div class="stats">
-            <div class="stat">
-              Threshold
-              <strong id="thresholdValue">-</strong>
-            </div>
-            <div class="stat">
-              Current Burn
-              <strong id="burnValue">-</strong>
-            </div>
-            <div class="stat">
-              Samples
-              <strong id="sampleValue">0</strong>
-            </div>
+        <div class="panel-header"><h2>Outcome</h2><span class="hint">pre-fix vs post-fix</span></div>
+        <div class="panel-body">
+          <div class="verdicts">
+            <div class="verdict"><div class="t">Pre-fix run</div><div class="v" id="preVerdict">—</div><div class="pk" id="prePeak"></div></div>
+            <div class="verdict"><div class="t">Post-fix verify</div><div class="v" id="postVerdict">—</div><div class="pk" id="postPeak"></div></div>
           </div>
+          <h2 style="font-size:0.78rem;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;margin:4px 0 8px;">Ranked dependencies</h2>
+          <table id="candTable"><thead><tr><th>Dependency</th><th>Risk</th><th>Bad%</th><th>p95</th><th>Hardened</th></tr></thead><tbody id="candBody"><tr><td colspan="5" class="hint">Run the game day to rank dependencies…</td></tr></tbody></table>
         </div>
       </section>
     </div>
 
-    <script>
-      const feed = document.getElementById("feed");
-      const statusText = document.getElementById("statusText");
-      const thresholdValue = document.getElementById("thresholdValue");
-      const burnValue = document.getElementById("burnValue");
-      const sampleValue = document.getElementById("sampleValue");
-      const abortBanner = document.getElementById("abortBanner");
-      const canvas = document.getElementById("chart");
-      const ctx = canvas.getContext("2d");
-      let samples = [];
-      let threshold = 10;
+    <div class="grid" style="padding-top:0;">
+      <section class="panel" style="grid-column: 1 / -1;">
+        <div class="panel-header"><h2>Agent reasoning feed</h2><span class="hint">live decisions &amp; actions</span></div>
+        <div class="panel-body"><div class="feed" id="feed"></div></div>
+      </section>
+    </div>
 
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const feed = $("feed"), statusText = $("statusText"), abortBanner = $("abortBanner");
+      const canvas = $("chart"), ctx = canvas.getContext("2d");
+      let samples = [], threshold = 10, runIndex = 0, peak = 0;
+
+      const STEPS = [
+        { key: "rank", label: "Rank dependencies", sub: "Score live services by risk" },
+        { key: "approve", label: "Human approval", sub: "You authorise the test" },
+        { key: "inject", label: "Inject fault", sub: "Add latency on the target" },
+        { key: "abort", label: "Auto-abort", sub: "Deterministic safety brake" },
+        { key: "harden", label: "Harden + PR", sub: "Timeout & retry fix" },
+        { key: "verify", label: "Verify fix", sub: "Re-run must pass" },
+      ];
+      const pipeline = $("pipeline");
+      STEPS.forEach((s, i) => {
+        const el = document.createElement("div");
+        el.className = "step"; el.id = "step-" + s.key;
+        el.innerHTML = `<div class="num">STEP ${i + 1}</div><div class="label">${s.label}</div><div class="sub">${s.sub}</div>`;
+        pipeline.appendChild(el);
+      });
+      const setStep = (key, state, sub) => {
+        const el = $("step-" + key); if (!el) return;
+        el.classList.remove("active", "done", "failed");
+        if (state) el.classList.add(state);
+        if (sub) el.querySelector(".sub").textContent = sub;
+      };
+
+      function tag(event) {
+        if (event.type === "abort") return "abort";
+        if (event.level === "warning") return "warn";
+        return event.phase || event.type || "event";
+      }
       function addEvent(event) {
+        if (event.type === "burn") return; // burn handled on the chart
         const card = document.createElement("div");
         card.className = "event";
-        const timestamp = document.createElement("small");
-        timestamp.textContent = `${event.phase || event.type || "event"} - ${event.ts || ""}`;
-        const body = document.createElement("div");
-        body.textContent = event.text || JSON.stringify(event);
-        card.appendChild(timestamp);
-        card.appendChild(body);
-        feed.prepend(card);
+        const t = document.createElement("span"); t.className = "tag " + (tag(event) === "abort" ? "abort" : event.level === "warning" ? "warn" : "");
+        t.textContent = tag(event);
+        const b = document.createElement("div"); b.className = "txt";
+        b.textContent = event.text || (event.type === "candidates" ? "Ranked dependency candidates." : JSON.stringify(event));
+        card.appendChild(t); card.appendChild(b); feed.prepend(card);
+      }
+
+      function renderCandidates(cands) {
+        const body = $("candBody"); body.innerHTML = "";
+        const top = cands.reduce((a, c) => (c.risk_score > (a?.risk_score ?? -1) ? c : a), null);
+        cands.forEach((c) => {
+          const tr = document.createElement("tr");
+          if (top && c.edge === top.edge) tr.className = "chosen";
+          tr.innerHTML = `<td>${c.edge}</td><td>${c.risk_score}</td><td>${(c.bad_ratio*100).toFixed(1)}%</td><td>${Math.round(c.p95_ms)}ms</td><td>${c.hardened ? "yes" : "no"}</td>`;
+          body.appendChild(tr);
+        });
+        setStep("rank", "done");
       }
 
       function drawChart() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = "rgba(255,255,255,0.12)";
-        ctx.lineWidth = 1;
-        for (let i = 1; i < 4; i += 1) {
-          const y = (canvas.height / 4) * i;
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(canvas.width, y);
-          ctx.stroke();
-        }
-
-        const maxBurn = Math.max(threshold * 1.2, ...samples.map((s) => s.burn || 0), 1);
-        const xStep = samples.length > 1 ? canvas.width / (samples.length - 1) : canvas.width;
-
-        ctx.strokeStyle = "#f7c948";
-        ctx.lineWidth = 2;
-        const thresholdY = canvas.height - (threshold / maxBurn) * canvas.height;
-        ctx.beginPath();
-        ctx.moveTo(0, thresholdY);
-        ctx.lineTo(canvas.width, thresholdY);
-        ctx.stroke();
-
-        ctx.strokeStyle = "#7ec8ff";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        samples.forEach((sample, index) => {
-          const x = index * xStep;
-          const y = canvas.height - ((sample.burn || 0) / maxBurn) * canvas.height;
-          if (index === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
-          }
-        });
+        const w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        ctx.strokeStyle = "rgba(255,255,255,0.10)"; ctx.lineWidth = 1;
+        for (let i = 1; i < 4; i++) { const y = (h/4)*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+        const maxBurn = Math.max(threshold*1.3, ...samples.map(s=>s.burn||0), 1);
+        // threshold line
+        const ty = h - (threshold/maxBurn)*h;
+        ctx.setLineDash([6,5]); ctx.strokeStyle = "#f7c948"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0,ty); ctx.lineTo(w,ty); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = "#f7c948"; ctx.font = "12px Segoe UI"; ctx.fillText("abort " + threshold, 8, Math.max(14, ty-6));
+        // burn line
+        const xStep = samples.length > 1 ? w/(samples.length-1) : w;
+        ctx.strokeStyle = "#7ec8ff"; ctx.lineWidth = 3; ctx.beginPath();
+        samples.forEach((s,i)=>{ const x=i*xStep, y=h-((s.burn||0)/maxBurn)*h; i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
         ctx.stroke();
       }
 
-      async function refreshSli() {
-        try {
-          const response = await fetch("/sli");
-          const data = await response.json();
-          threshold = data.threshold || threshold;
-          samples = data.samples || samples;
-          thresholdValue.textContent = threshold.toFixed(2);
-          sampleValue.textContent = String(samples.length);
-          if (typeof data.current_burn === "number") {
-            burnValue.textContent = data.current_burn.toFixed(2);
-          }
-          drawChart();
-        } catch (error) {
-          statusText.textContent = "SLI refresh failed";
-        }
+      function startRun() {
+        runIndex += 1; samples = []; peak = 0;
+        if (runIndex === 1) { $("chartPhase").textContent = "pre-fix"; $("chartTitle").textContent = "Fault injection — watch burn climb to the abort line."; setStep("inject","active"); }
+        else { $("chartPhase").textContent = "post-fix"; $("chartTitle").textContent = "Verification re-run against the hardened service — burn should stay low."; setStep("verify","active","Re-running against the fix"); }
+        drawChart();
       }
-
-      document.getElementById("runButton").addEventListener("click", async () => {
-        statusText.textContent = "Running";
-        abortBanner.style.display = "none";
-        await fetch("/run-demo", { method: "POST" });
-      });
-
-      document.getElementById("approveButton").addEventListener("click", async () => {
-        await fetch("/approve", { method: "POST" });
-        statusText.textContent = "Approved";
-      });
 
       const source = new EventSource("/events");
-      source.onmessage = (message) => {
-        const event = JSON.parse(message.data);
-        addEvent(event);
-        if (event.type === "burn") {
-          samples = [...samples.slice(-59), event];
-          burnValue.textContent = Number(event.burn || 0).toFixed(2);
-          threshold = event.threshold || threshold;
+      source.onmessage = (m) => {
+        const e = JSON.parse(m.data);
+        addEvent(e);
+        if (e.type === "candidates" && e.candidates) renderCandidates(e.candidates);
+        if (e.type === "reasoning") {
+          const p = e.phase;
+          if (p === "rank" || p === "select" || p === "hypothesis") setStep("rank","done");
+          if (p === "run") startRun();
+          if (p === "harden") setStep("harden","done", e.text && e.text.includes("PR") ? "PR opened" : "Fix applied");
+          if (p === "verify") {
+            setStep("verify","active");
+            if (e.text && e.text.includes("PASSED")) { setStep("verify","done","Fix confirmed ✓"); const m2=e.text.match(/peak burn ([\d.]+)/); $("postVerdict").textContent="PASSED"; $("postVerdict").className="v ok"; if(m2)$("postPeak").textContent="peak burn "+m2[1]; }
+            else if (e.text && e.text.includes("STILL FAILING")) { setStep("verify","failed","Still failing"); $("postVerdict").textContent="FAILED"; $("postVerdict").className="v bad"; }
+          }
+          if (p === "done") statusText.textContent = e.text || "Done.";
+        }
+        if (e.type === "burn") {
+          samples = [...samples.slice(-79), e]; peak = Math.max(peak, e.burn||0);
+          threshold = e.threshold || threshold;
+          $("burnValue").textContent = Number(e.burn||0).toFixed(2);
+          $("thresholdValue").textContent = Number(threshold).toFixed(0);
+          $("sampleValue").textContent = String(samples.length);
           drawChart();
         }
-        if (event.type === "abort") {
+        if (e.type === "abort") {
           abortBanner.style.display = "block";
-          statusText.textContent = "Aborted";
+          setStep("inject","done"); setStep("abort","done","Burn " + Number(e.burn||0).toFixed(1) + " > " + Number(e.threshold||threshold).toFixed(0));
+          if (runIndex === 1) { $("preVerdict").textContent="ABORTED"; $("preVerdict").className="v bad"; $("prePeak").textContent="peak burn " + peak.toFixed(1); }
+          statusText.textContent = "Fault auto-aborted — vulnerability proven.";
         }
-        if (event.type === "approval_requested") {
-          statusText.textContent = "Awaiting approval";
+        if (e.type === "approval_requested") {
+          setStep("approve","active"); setStep("rank","done");
+          $("approveButton").disabled = false; $("approveButton").classList.add("pulse");
+          statusText.textContent = "⏳ Awaiting your approval to inject the fault.";
+        }
+        if (e.type === "approval_granted") {
+          setStep("approve","done"); $("approveButton").disabled = true; $("approveButton").classList.remove("pulse");
+          statusText.textContent = "Approved — running the experiment.";
         }
       };
+      source.onopen = () => { $("connDot").className = "dot live"; $("connText").textContent = "live feed"; };
+      source.onerror = () => { $("connDot").className = "dot fallback"; $("connText").textContent = "reconnecting…"; };
 
-      refreshSli();
-      setInterval(refreshSli, 2000);
+      $("runButton").addEventListener("click", async () => {
+        // reset UI
+        abortBanner.style.display = "none"; runIndex = 0; samples = []; peak = 0;
+        ["rank","approve","inject","abort","harden","verify"].forEach(k=>setStep(k,""));
+        $("preVerdict").textContent="—"; $("preVerdict").className="v"; $("postVerdict").textContent="—"; $("postVerdict").className="v";
+        $("prePeak").textContent=""; $("postPeak").textContent="";
+        statusText.textContent = "Starting game day via Google ADK…";
+        await fetch("/run-agent", { method: "POST" });
+      });
+      $("approveButton").addEventListener("click", async () => {
+        await fetch("/approve", { method: "POST" });
+        $("approveButton").disabled = true; $("approveButton").classList.remove("pulse");
+      });
+
+      async function refreshHealth() {
+        try {
+          const h = await (await fetch("/health")).json();
+          if (h.dynatrace_configured) { $("dtDot").className="dot live"; $("dtMode").textContent="MCP live"; }
+          else { $("dtDot").className="dot fallback"; $("dtMode").textContent="local SLI fallback"; }
+        } catch (_) {}
+      }
+      async function refreshSli() {
+        try {
+          const d = await (await fetch("/sli")).json();
+          threshold = d.threshold || threshold;
+          $("thresholdValue").textContent = Number(threshold).toFixed(0);
+        } catch (_) {}
+      }
+      refreshHealth(); refreshSli();
     </script>
   </body>
 </html>
