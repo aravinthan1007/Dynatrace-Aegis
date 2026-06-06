@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aegis Dashboard</title>
+    <style>
+      :root {
+        --bg: #07131e;
+        --panel: rgba(10, 24, 37, 0.84);
+        --panel-border: rgba(157, 197, 255, 0.15);
+        --text: #e9f2ff;
+        --muted: #93a9bf;
+        --accent: #7be0b7;
+        --warn: #ff6f61;
+        --line: #7ec8ff;
+        --threshold: #f7c948;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", "Avenir Next", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(45, 115, 255, 0.25), transparent 30%),
+          radial-gradient(circle at bottom right, rgba(123, 224, 183, 0.14), transparent 30%),
+          linear-gradient(160deg, #041018 0%, #07131e 45%, #0a1b28 100%);
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 20px;
+        padding: 24px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 20px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+        overflow: hidden;
+      }
+
+      .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 18px 20px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .panel-header h1,
+      .panel-header h2 {
+        margin: 0;
+        font-size: 1rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .subtle {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .controls {
+        display: flex;
+        gap: 12px;
+        padding: 16px 20px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        color: #041018;
+        background: linear-gradient(135deg, var(--accent), #a7f3d0);
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button.secondary {
+        background: linear-gradient(135deg, #d8e7ff, #8cb8ff);
+      }
+
+      .feed {
+        height: calc(100vh - 170px);
+        overflow: auto;
+        padding: 0 20px 20px;
+      }
+
+      .event {
+        margin: 14px 0;
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .event small {
+        color: var(--muted);
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .chart-wrap {
+        padding: 18px 20px 20px;
+      }
+
+      #abortBanner {
+        display: none;
+        margin: 16px 20px 0;
+        padding: 16px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, rgba(255, 111, 97, 0.95), rgba(199, 32, 62, 0.92));
+        color: white;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      canvas {
+        width: 100%;
+        height: 320px;
+        background: rgba(0, 0, 0, 0.15);
+        border-radius: 16px;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .stat {
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 1.5rem;
+        margin-top: 8px;
+      }
+
+      @media (max-width: 900px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        .feed {
+          height: 420px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="panel">
+        <div class="panel-header">
+          <h1>Aegis Reasoning Feed</h1>
+          <span class="subtle" id="statusText">Idle</span>
+        </div>
+        <div class="controls">
+          <button id="runButton">Run Game Day</button>
+          <button class="secondary" id="approveButton">Approve Injection</button>
+        </div>
+        <div class="feed" id="feed"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Live Burn Rate</h2>
+          <span class="subtle">Deterministic auto-abort</span>
+        </div>
+        <div id="abortBanner">Abort triggered</div>
+        <div class="chart-wrap">
+          <canvas id="chart" width="700" height="320"></canvas>
+          <div class="stats">
+            <div class="stat">
+              Threshold
+              <strong id="thresholdValue">-</strong>
+            </div>
+            <div class="stat">
+              Current Burn
+              <strong id="burnValue">-</strong>
+            </div>
+            <div class="stat">
+              Samples
+              <strong id="sampleValue">0</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const feed = document.getElementById("feed");
+      const statusText = document.getElementById("statusText");
+      const thresholdValue = document.getElementById("thresholdValue");
+      const burnValue = document.getElementById("burnValue");
+      const sampleValue = document.getElementById("sampleValue");
+      const abortBanner = document.getElementById("abortBanner");
+      const canvas = document.getElementById("chart");
+      const ctx = canvas.getContext("2d");
+      let samples = [];
+      let threshold = 10;
+
+      function addEvent(event) {
+        const card = document.createElement("div");
+        card.className = "event";
+        const timestamp = document.createElement("small");
+        timestamp.textContent = `${event.phase || event.type || "event"} - ${event.ts || ""}`;
+        const body = document.createElement("div");
+        body.textContent = event.text || JSON.stringify(event);
+        card.appendChild(timestamp);
+        card.appendChild(body);
+        feed.prepend(card);
+      }
+
+      function drawChart() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = "rgba(255,255,255,0.12)";
+        ctx.lineWidth = 1;
+        for (let i = 1; i < 4; i += 1) {
+          const y = (canvas.height / 4) * i;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvas.width, y);
+          ctx.stroke();
+        }
+
+        const maxBurn = Math.max(threshold * 1.2, ...samples.map((s) => s.burn || 0), 1);
+        const xStep = samples.length > 1 ? canvas.width / (samples.length - 1) : canvas.width;
+
+        ctx.strokeStyle = "#f7c948";
+        ctx.lineWidth = 2;
+        const thresholdY = canvas.height - (threshold / maxBurn) * canvas.height;
+        ctx.beginPath();
+        ctx.moveTo(0, thresholdY);
+        ctx.lineTo(canvas.width, thresholdY);
+        ctx.stroke();
+
+        ctx.strokeStyle = "#7ec8ff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        samples.forEach((sample, index) => {
+          const x = index * xStep;
+          const y = canvas.height - ((sample.burn || 0) / maxBurn) * canvas.height;
+          if (index === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.stroke();
+      }
+
+      async function refreshSli() {
+        try {
+          const response = await fetch("/sli");
+          const data = await response.json();
+          threshold = data.threshold || threshold;
+          samples = data.samples || samples;
+          thresholdValue.textContent = threshold.toFixed(2);
+          sampleValue.textContent = String(samples.length);
+          if (typeof data.current_burn === "number") {
+            burnValue.textContent = data.current_burn.toFixed(2);
+          }
+          drawChart();
+        } catch (error) {
+          statusText.textContent = "SLI refresh failed";
+        }
+      }
+
+      document.getElementById("runButton").addEventListener("click", async () => {
+        statusText.textContent = "Running";
+        abortBanner.style.display = "none";
+        await fetch("/run-demo", { method: "POST" });
+      });
+
+      document.getElementById("approveButton").addEventListener("click", async () => {
+        await fetch("/approve", { method: "POST" });
+        statusText.textContent = "Approved";
+      });
+
+      const source = new EventSource("/events");
+      source.onmessage = (message) => {
+        const event = JSON.parse(message.data);
+        addEvent(event);
+        if (event.type === "burn") {
+          samples = [...samples.slice(-59), event];
+          burnValue.textContent = Number(event.burn || 0).toFixed(2);
+          threshold = event.threshold || threshold;
+          drawChart();
+        }
+        if (event.type === "abort") {
+          abortBanner.style.display = "block";
+          statusText.textContent = "Aborted";
+        }
+        if (event.type === "approval_requested") {
+          statusText.textContent = "Awaiting approval";
+        }
+      };
+
+      refreshSli();
+      setInterval(refreshSli, 2000);
+    </script>
+  </body>
+</html>

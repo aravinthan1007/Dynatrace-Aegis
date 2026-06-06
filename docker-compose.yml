@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  demo_app:
+    image: python:3.11-slim
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      DEMO_APP_BASE_URL: http://demo_app:8001
+    volumes:
+      - ./:/app
+    command: >
+      sh -c "pip install -r demo_app/requirements.txt &&
+      uvicorn demo_app.main:app --host 0.0.0.0 --port 8001"
+    ports:
+      - "8001:8001"
+
+  dashboard:
+    image: python:3.11-slim
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      AEGIS_DEMO_APP_URL: http://demo_app:8001
+    volumes:
+      - ./:/app
+    command: >
+      sh -c "pip install -r requirements.txt -r demo_app/requirements.txt &&
+      uvicorn dashboard.server:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - demo_app
+
+  loadgen:
+    image: python:3.11-slim
+    working_dir: /app
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    command: >
+      sh -c "pip install httpx &&
+      python loadgen/loadgen.py --base-url http://demo_app:8001 --rps ${LOADGEN_RPS:-20}"
+    depends_on:
+      - demo_app
