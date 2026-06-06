@@ -7,6 +7,7 @@ with a numeric threshold. Gemini never participates in the abort decision.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import time
 from typing import Any, Callable
 
@@ -17,6 +18,22 @@ from .dynatrace import make_burn_sampler
 from .events import event_bus
 
 SamplerFactory = Callable[[AegisConfig], Any]
+
+
+def run_coro_blocking(coro: Any) -> Any:
+    """Run a coroutine to completion even if a loop is already running.
+
+    ADK executes sync tools inside its event loop, so a bare `asyncio.run()`
+    would raise "cannot be called from a running event loop". When that happens
+    we offload to a dedicated worker thread that owns its own loop.
+    """
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 async def _run_experiment_async(
@@ -122,7 +139,7 @@ def run_experiment(
 
     config = config or get_config()
     sampler_factory = sampler_factory or make_burn_sampler
-    return asyncio.run(
+    return run_coro_blocking(
         _run_experiment_async(
             target=target,
             latency_ms=latency_ms,

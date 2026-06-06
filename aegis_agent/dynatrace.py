@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 from dataclasses import dataclass
 import shutil
 from typing import Any
@@ -16,6 +17,16 @@ from .dql import build_burn_rate_query
 from .events import event_bus
 
 _VERIFIED_QUERIES: set[str] = set()
+
+
+def _run_blocking(coro: Any) -> Any:
+    """Run a coroutine even if an event loop is already running (e.g. under ADK)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 @dataclass(slots=True)
@@ -406,7 +417,7 @@ def make_burn_sampler(config: AegisConfig) -> BurnRateSampler:
 
 
 def get_burn_rate(config: AegisConfig | None = None) -> float:
-    return asyncio.run(fetch_burn_rate(config))
+    return _run_blocking(fetch_burn_rate(config))
 
 
 def list_dynatrace_tools(config: AegisConfig | None = None) -> list[str]:
@@ -417,7 +428,7 @@ def list_dynatrace_tools(config: AegisConfig | None = None) -> list[str]:
         async with DynatraceMcpClient(cfg) as client:
             return [tool["name"] for tool in await client.list_tools()]
 
-    return asyncio.run(_run())
+    return _run_blocking(_run())
 
 
 def create_notebook(title: str, markdown_body: str, config: AegisConfig | None = None) -> dict[str, Any]:
@@ -433,7 +444,7 @@ def create_notebook(title: str, markdown_body: str, config: AegisConfig | None =
         async with DynatraceMcpClient(cfg) as client:
             return await client.create_notebook(title, markdown_body)
 
-    return asyncio.run(_run())
+    return _run_blocking(_run())
 
 
 def send_event(title: str, properties: dict[str, Any] | None = None, config: AegisConfig | None = None) -> None:
@@ -445,6 +456,6 @@ def send_event(title: str, properties: dict[str, Any] | None = None, config: Aeg
             await client.send_event(title, properties)
 
     try:
-        asyncio.run(_run())
+        _run_blocking(_run())
     except Exception:
         return
