@@ -65,7 +65,7 @@ def get_config() -> AegisConfig:
     load_dotenv()
     load_dotenv(package_root / ".env")
     return AegisConfig(
-        gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip(),
+        gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip(),
         google_api_key=os.getenv("GOOGLE_API_KEY", "").strip(),
         dt_environment=os.getenv("DT_ENVIRONMENT", "").strip(),
         dt_platform_token=os.getenv("DT_PLATFORM_TOKEN", "").strip(),
