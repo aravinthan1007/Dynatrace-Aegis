@@ -237,56 +237,61 @@ def open_github_pr(
         "Accept": "application/vnd.github+json",
     }
 
-    with httpx.Client(base_url="https://api.github.com", headers=headers, timeout=30) as client:
-        repo_resp = client.get(f"/repos/{owner}/{repo}")
-        repo_resp.raise_for_status()
-        repo_json = repo_resp.json()
-        base_branch = config.github_base_branch or repo_json["default_branch"]
+    # A PR failure (e.g. token missing Contents/Pull-requests write) must never crash
+    # the game day — return a status dict instead of raising.
+    try:
+        with httpx.Client(base_url="https://api.github.com", headers=headers, timeout=30) as client:
+            repo_resp = client.get(f"/repos/{owner}/{repo}")
+            repo_resp.raise_for_status()
+            repo_json = repo_resp.json()
+            base_branch = config.github_base_branch or repo_json["default_branch"]
 
-        ref_resp = client.get(f"/repos/{owner}/{repo}/git/ref/heads/{base_branch}")
-        ref_resp.raise_for_status()
-        base_sha = ref_resp.json()["object"]["sha"]
+            ref_resp = client.get(f"/repos/{owner}/{repo}/git/ref/heads/{base_branch}")
+            ref_resp.raise_for_status()
+            base_sha = ref_resp.json()["object"]["sha"]
 
-        create_ref = client.post(
-            f"/repos/{owner}/{repo}/git/refs",
-            json={"ref": f"refs/heads/{branch}", "sha": base_sha},
-        )
-        if create_ref.status_code not in {201, 422}:
-            create_ref.raise_for_status()
+            create_ref = client.post(
+                f"/repos/{owner}/{repo}/git/refs",
+                json={"ref": f"refs/heads/{branch}", "sha": base_sha},
+            )
+            if create_ref.status_code not in {201, 422}:
+                create_ref.raise_for_status()
 
-        existing = client.get(f"/repos/{owner}/{repo}/contents/{target_path}", params={"ref": base_branch})
-        existing.raise_for_status()
-        existing_json = existing.json()
+            existing = client.get(f"/repos/{owner}/{repo}/contents/{target_path}", params={"ref": base_branch})
+            existing.raise_for_status()
+            existing_json = existing.json()
 
-        put_content = client.put(
-            f"/repos/{owner}/{repo}/contents/{target_path}",
-            json={
-                "message": "feat: harden payment client timeout and retry policy",
-                "content": base64.b64encode(new_content.encode("utf-8")).decode("utf-8"),
-                "sha": existing_json["sha"],
-                "branch": branch,
-            },
-        )
-        put_content.raise_for_status()
+            put_content = client.put(
+                f"/repos/{owner}/{repo}/contents/{target_path}",
+                json={
+                    "message": "feat: harden payment client timeout and retry policy",
+                    "content": base64.b64encode(new_content.encode("utf-8")).decode("utf-8"),
+                    "sha": existing_json["sha"],
+                    "branch": branch,
+                },
+            )
+            put_content.raise_for_status()
 
-        pr_resp = client.post(
-            f"/repos/{owner}/{repo}/pulls",
-            json={
-                "title": title,
-                "head": branch,
-                "base": base_branch,
-                "body": body,
-            },
-        )
-        pr_resp.raise_for_status()
-        pr_json = pr_resp.json()
-
-    return {
-        "status": "opened",
-        "url": pr_json.get("html_url"),
-        "branch": branch,
-        "file_path": target_path,
-    }
+            pr_resp = client.post(
+                f"/repos/{owner}/{repo}/pulls",
+                json={"title": title, "head": branch, "base": base_branch, "body": body},
+            )
+            pr_resp.raise_for_status()
+            pr_json = pr_resp.json()
+        return {
+            "status": "opened",
+            "url": pr_json.get("html_url"),
+            "branch": branch,
+            "file_path": target_path,
+        }
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code
+        hint = ""
+        if code == 403:
+            hint = " (the fine-grained token needs Contents: write + Pull requests: write on this repo)"
+        return {"status": "error", "detail": f"GitHub {code}{hint}", "file_path": target_path}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)[:200], "file_path": target_path}
 
 
 def post_slack(message: str, *, config: AegisConfig | None = None) -> dict[str, Any]:
