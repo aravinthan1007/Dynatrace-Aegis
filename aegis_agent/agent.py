@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import time
 from textwrap import dedent
 from typing import Any
@@ -517,8 +519,70 @@ INSTRUCTION = dedent(
 
     Never improvise your own abort logic. The safety stop must stay inside `run_experiment_tool`.
     If Dynatrace is unavailable, be honest and continue with the local fallback burn signal.
+
+    If Dynatrace MCP tools are available (e.g. execute_dql, list_problems,
+    find_entity_by_name), you may call them to enrich the report with live
+    observability data, but never let them gate or replace the deterministic abort.
     """
 ).strip()
+
+
+def _dynatrace_mcp_toolset():
+    """Attach the live Dynatrace MCP server as an ADK toolset (Method 2).
+
+    When enabled, Gemini can call Dynatrace tools directly during the game day
+    (execute_dql, list_problems, find_entity_by_name, ...). Opt-in via
+    AEGIS_DT_MCP_TOOLS=true so it doesn't break headless Cloud Run, where the
+    npx/OAuth handshake can't complete without a platform token.
+    """
+
+    enabled = os.getenv("AEGIS_DT_MCP_TOOLS", "").strip().lower() in {"1", "true", "yes", "on"}
+    if not (enabled and config.has_dynatrace):
+        return None
+    try:
+        from google.adk.tools.mcp_tool import McpToolset
+        from google.adk.tools.mcp_tool import StdioConnectionParams
+        from mcp import StdioServerParameters
+    except Exception:
+        return None
+
+    npx_path = shutil.which("npx.cmd") or shutil.which("npx") or "npx"
+    env = {"DT_ENVIRONMENT": config.dt_environment}
+    if config.dt_platform_token:
+        env["DT_PLATFORM_TOKEN"] = config.dt_platform_token
+    if config.dt_api_token:
+        env["DT_API_TOKEN"] = config.dt_api_token
+    if config.dt_disable_telemetry:
+        env["DT_MCP_DISABLE_TELEMETRY"] = "true"
+    try:
+        return McpToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
+                    command=npx_path,
+                    args=["-y", f"@dynatrace-oss/dynatrace-mcp-server@{config.dt_mcp_server_version}"],
+                    env=env,
+                ),
+                timeout=config.mcp_timeout_seconds,
+            )
+        )
+    except Exception:
+        return None
+
+
+_AEGIS_TOOLS = [
+    FunctionTool(gather_dynatrace_context),
+    FunctionTool(request_human_approval),
+    FunctionTool(run_experiment_tool),
+    FunctionTool(create_game_day_scorecard),
+    FunctionTool(open_hardening_pr),
+    FunctionTool(apply_hardening_fix),
+    FunctionTool(verify_after_fix),
+    FunctionTool(post_summary_to_slack),
+    FunctionTool(run_aegis_game_day),
+]
+_dt_toolset = _dynatrace_mcp_toolset()
+if _dt_toolset is not None:
+    _AEGIS_TOOLS.append(_dt_toolset)
 
 
 root_agent = BaseAgent(
@@ -526,17 +590,7 @@ root_agent = BaseAgent(
     model=config.gemini_model,
     description="Autonomous resilience game-day agent with deterministic safety aborts.",
     instruction=INSTRUCTION,
-    tools=[
-        FunctionTool(gather_dynatrace_context),
-        FunctionTool(request_human_approval),
-        FunctionTool(run_experiment_tool),
-        FunctionTool(create_game_day_scorecard),
-        FunctionTool(open_hardening_pr),
-        FunctionTool(apply_hardening_fix),
-        FunctionTool(verify_after_fix),
-        FunctionTool(post_summary_to_slack),
-        FunctionTool(run_aegis_game_day),
-    ],
+    tools=_AEGIS_TOOLS,
 )
 
 app = App(root_agent=root_agent, name="aegis")
