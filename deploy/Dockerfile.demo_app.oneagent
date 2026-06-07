@@ -1,0 +1,37 @@
+# OneAgent code-injection build for the Python demo app (Cloud Run).
+# Build with Cloud Build so we can pass the PaaS token as a build arg:
+#
+#   gcloud builds submit \
+#     --config deploy/cloudbuild.oneagent.yaml \
+#     --substitutions _DT_API_URL=https://wkf10640.live.dynatrace.com/api,_DT_PAAS_TOKEN=dt0c01...,_TECH=all .
+#
+# Then deploy the built image with the runtime connection vars:
+#   gcloud run deploy aegis-demo-app --image <IMAGE> --region us-central1 --allow-unauthenticated \
+#     --set-env-vars DT_TENANT=wkf10640,DT_CONNECTION_POINT=https://wkf10640.live.dynatrace.com:443 --port 8080
+#
+# Requires a token with the InstallerDownload (PaaS) scope, or stage 1 will 401.
+
+# Stage 1: download the OneAgent PaaS installer
+FROM alpine:latest AS dynatrace
+ARG DT_API_URL
+ARG DT_PAAS_TOKEN
+ARG DT_ONEAGENT_TECH_TYPE=all
+RUN apk add --no-cache wget unzip ca-certificates && \
+    wget -O /tmp/oneagent.zip \
+      "${DT_API_URL}/v1/deployment/installer/agent/unix/paas/latest?Api-Token=${DT_PAAS_TOKEN}&flavor=default&include=${DT_ONEAGENT_TECH_TYPE}&arch=x86" && \
+    mkdir -p /opt/dynatrace/oneagent && \
+    unzip -o -d /opt/dynatrace/oneagent /tmp/oneagent.zip
+
+# Stage 2: application runtime
+FROM python:3.11-slim
+COPY --from=dynatrace /opt/dynatrace/oneagent /opt/dynatrace/oneagent
+# Automatic injection into the Python process
+ENV LD_PRELOAD=/opt/dynatrace/oneagent/agent/lib64/liboneagentproc.so
+
+WORKDIR /app
+COPY demo_app/requirements.txt ./demo_app-requirements.txt
+RUN pip install --no-cache-dir -r demo_app-requirements.txt
+COPY . .
+
+ENV PORT=8080
+CMD ["uvicorn", "demo_app.main:app", "--host", "0.0.0.0", "--port", "8080"]

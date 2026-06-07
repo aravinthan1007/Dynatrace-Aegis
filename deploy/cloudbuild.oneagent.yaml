@@ -1,0 +1,25 @@
+# Build the OneAgent-injected demo image, passing the PaaS token as a build arg.
+# Usage:
+#   gcloud builds submit --config deploy/cloudbuild.oneagent.yaml \
+#     --substitutions _DT_API_URL=https://wkf10640.live.dynatrace.com/api,_DT_PAAS_TOKEN=<paas-token>,_TECH=all .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - deploy/Dockerfile.demo_app.oneagent
+      - --build-arg
+      - DT_API_URL=${_DT_API_URL}
+      - --build-arg
+      - DT_PAAS_TOKEN=${_DT_PAAS_TOKEN}
+      - --build-arg
+      - DT_ONEAGENT_TECH_TYPE=${_TECH}
+      - -t
+      - us-central1-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/aegis-demo-app-oneagent:latest
+      - .
+images:
+  - us-central1-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/aegis-demo-app-oneagent:latest
+substitutions:
+  _DT_API_URL: ""
+  _DT_PAAS_TOKEN: ""
+  _TECH: "all"
