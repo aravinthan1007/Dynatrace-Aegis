@@ -110,6 +110,8 @@
       .event .tag { display: inline-block; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 999px; background: rgba(140,184,255,0.18); color: var(--accent2); margin-bottom: 6px; }
       .event .tag.abort { background: rgba(255,111,97,0.2); color: var(--bad); }
       .event .tag.warn { background: rgba(247,201,72,0.18); color: var(--threshold); }
+      .event .evhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+      .event .evtime { color: var(--muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
       .event .txt { font-size: 0.88rem; line-height: 1.35; }
       #abortBanner { display: none; margin: 0 0 12px; padding: 12px; border-radius: 12px; text-align: center;
         background: linear-gradient(135deg, rgba(255,111,97,0.95), rgba(199,32,62,0.92)); color: #fff; font-weight: 800; letter-spacing: 0.06em; }
@@ -213,15 +215,22 @@
         if (event.level === "warning") return "warn";
         return event.phase || event.type || "event";
       }
+      function fmtTime(ts) {
+        const d = ts ? new Date(ts) : new Date();
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      }
       function addEvent(event) {
         if (event.type === "burn") return; // burn handled on the chart
         const card = document.createElement("div");
         card.className = "event";
+        const head = document.createElement("div"); head.className = "evhead";
         const t = document.createElement("span"); t.className = "tag " + (tag(event) === "abort" ? "abort" : event.level === "warning" ? "warn" : "");
         t.textContent = tag(event);
+        const time = document.createElement("span"); time.className = "evtime"; time.textContent = fmtTime(event.ts);
+        head.appendChild(t); head.appendChild(time);
         const b = document.createElement("div"); b.className = "txt";
         b.textContent = event.text || (event.type === "candidates" ? "Ranked dependency candidates." : JSON.stringify(event));
-        card.appendChild(t); card.appendChild(b); feed.prepend(card);
+        card.appendChild(head); card.appendChild(b); feed.prepend(card);
       }
 
       function renderCandidates(cands) {
@@ -252,6 +261,21 @@
         ctx.strokeStyle = "#7ec8ff"; ctx.lineWidth = 3; ctx.beginPath();
         samples.forEach((s,i)=>{ const x=i*xStep, y=h-((s.burn||0)/maxBurn)*h; i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
         ctx.stroke();
+
+        // x-axis: elapsed-time ticks so the live feed is readable over time
+        ctx.fillStyle = "#93a9bf"; ctx.font = "11px Segoe UI";
+        if (samples.length) {
+          const first = Number(samples[0].t ?? 0);
+          const last = Number(samples[samples.length - 1].t ?? 0);
+          ctx.textAlign = "left";   ctx.fillText(`t=${first}s`, 4, h - 6);
+          ctx.textAlign = "center"; ctx.fillText("elapsed time", w / 2, h - 6);
+          ctx.textAlign = "right";  ctx.fillText(`t=${last}s`, w - 4, h - 6);
+          ctx.textAlign = "left";
+          // marker for the latest sample
+          const lx = (samples.length - 1) * xStep;
+          const ly = h - ((samples[samples.length - 1].burn || 0) / maxBurn) * h;
+          ctx.fillStyle = "#7ec8ff"; ctx.beginPath(); ctx.arc(lx, ly, 3.5, 0, Math.PI * 2); ctx.fill();
+        }
       }
 
       function startRun() {
