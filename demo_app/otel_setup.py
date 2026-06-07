@@ -46,12 +46,16 @@ def configure_telemetry(app=None, service_name: str = "aegis-demo-app") -> bool:
     )
     trace.set_tracer_provider(tracer_provider)
 
-    metric_reader = PeriodicExportingMetricReader(
-        OTLPMetricExporter(endpoint=metrics_endpoint, headers=headers)
-    )
-    metrics.set_meter_provider(
-        MeterProvider(resource=resource, metric_readers=[metric_reader])
-    )
+    # Raw OTLP metric export is opt-in: Dynatrace derives service metrics from the
+    # traces, and the raw metric stream can 400 on temporality mismatches. Enable
+    # with DT_OTLP_METRICS=true if you specifically want OTLP metrics too.
+    if os.getenv("DT_OTLP_METRICS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        metric_reader = PeriodicExportingMetricReader(
+            OTLPMetricExporter(endpoint=metrics_endpoint, headers=headers)
+        )
+        metrics.set_meter_provider(
+            MeterProvider(resource=resource, metric_readers=[metric_reader])
+        )
     if app is not None:
         FastAPIInstrumentor.instrument_app(app)
     HTTPXClientInstrumentor().instrument()
