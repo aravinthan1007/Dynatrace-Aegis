@@ -22,6 +22,8 @@ class AegisConfig:
     dt_environment: str
     dt_platform_token: str
     dt_api_token: str
+    dt_oauth_client_id: str
+    dt_oauth_client_secret: str
     dt_mcp_server_version: str
     dt_disable_telemetry: bool
     dt_otlp_endpoint: str
@@ -70,6 +72,8 @@ def get_config() -> AegisConfig:
         dt_environment=os.getenv("DT_ENVIRONMENT", "").strip(),
         dt_platform_token=os.getenv("DT_PLATFORM_TOKEN", "").strip(),
         dt_api_token=os.getenv("DT_API_TOKEN", "").strip(),
+        dt_oauth_client_id=os.getenv("OAUTH_CLIENT_ID", os.getenv("DT_OAUTH_CLIENT_ID", "")).strip(),
+        dt_oauth_client_secret=os.getenv("OAUTH_CLIENT_SECRET", os.getenv("DT_OAUTH_CLIENT_SECRET", "")).strip(),
         dt_mcp_server_version=os.getenv("DT_MCP_SERVER_VERSION", "0.13.0").strip(),
         dt_disable_telemetry=_as_bool(os.getenv("DT_MCP_DISABLE_TELEMETRY"), True),
         dt_otlp_endpoint=os.getenv("DT_OTLP_ENDPOINT", "").strip(),

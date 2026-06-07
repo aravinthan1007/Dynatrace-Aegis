@@ -42,6 +42,40 @@ async def health() -> dict:
     }
 
 
+@app.get("/dt-check")
+async def dt_check() -> dict:
+    """Validate cloud -> Dynatrace connectivity (MCP tools + a trivial DQL)."""
+    auth = (
+        "oauth-client"
+        if (config.dt_oauth_client_id and config.dt_oauth_client_secret)
+        else ("platform-token" if config.dt_platform_token else ("api-token" if config.dt_api_token else "none"))
+    )
+    result = {
+        "dt_environment": config.dt_environment,
+        "configured": config.has_dynatrace,
+        "auth_method": auth,
+    }
+    if not config.has_dynatrace:
+        result["connected"] = False
+        result["detail"] = "DT_ENVIRONMENT not set on this service."
+        return result
+    try:
+        from aegis_agent.dynatrace import DynatraceMcpClient
+
+        async with DynatraceMcpClient(config) as client:
+            tools = await client.list_tools()
+            result["connected"] = True
+            result["tool_count"] = len(tools)
+            result["tools"] = [t["name"] for t in tools][:20]
+            dql = await client.execute_dql("fetch spans, from:now()-30m | summarize total = count()")
+            result["dql_ok"] = not dql.is_error
+            result["dql_detail"] = (dql.text or "")[:200]
+    except Exception as exc:
+        result["connected"] = False
+        result["error"] = str(exc)[:400]
+    return result
+
+
 @app.get("/events")
 async def events() -> StreamingResponse:
     subscriber, history = event_bus.subscribe()

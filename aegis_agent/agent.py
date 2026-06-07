@@ -552,6 +552,9 @@ def _dynatrace_mcp_toolset():
         env["DT_PLATFORM_TOKEN"] = config.dt_platform_token
     if config.dt_api_token:
         env["DT_API_TOKEN"] = config.dt_api_token
+    if config.dt_oauth_client_id and config.dt_oauth_client_secret:
+        env["OAUTH_CLIENT_ID"] = config.dt_oauth_client_id
+        env["OAUTH_CLIENT_SECRET"] = config.dt_oauth_client_secret
     if config.dt_disable_telemetry:
         env["DT_MCP_DISABLE_TELEMETRY"] = "true"
     try:

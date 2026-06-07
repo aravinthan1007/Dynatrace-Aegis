@@ -72,6 +72,10 @@ class DynatraceMcpClient:
             env["DT_PLATFORM_TOKEN"] = self._config.dt_platform_token
         if self._config.dt_api_token:
             env["DT_API_TOKEN"] = self._config.dt_api_token
+        # Headless OAuth client-credentials flow (works without a browser, e.g. Cloud Run).
+        if self._config.dt_oauth_client_id and self._config.dt_oauth_client_secret:
+            env["OAUTH_CLIENT_ID"] = self._config.dt_oauth_client_id
+            env["OAUTH_CLIENT_SECRET"] = self._config.dt_oauth_client_secret
         if self._config.dt_disable_telemetry:
             env["DT_MCP_DISABLE_TELEMETRY"] = "true"
 
