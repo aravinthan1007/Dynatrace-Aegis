@@ -46,13 +46,39 @@ def configure_telemetry(app=None, service_name: str = "aegis-demo-app") -> bool:
     )
     trace.set_tracer_provider(tracer_provider)
 
-    # Raw OTLP metric export is opt-in: Dynatrace derives service metrics from the
-    # traces, and the raw metric stream can 400 on temporality mismatches. Enable
-    # with DT_OTLP_METRICS=true if you specifically want OTLP metrics too.
-    if os.getenv("DT_OTLP_METRICS", "").strip().lower() in {"1", "true", "yes", "on"}:
-        metric_reader = PeriodicExportingMetricReader(
-            OTLPMetricExporter(endpoint=metrics_endpoint, headers=headers)
-        )
+    # OTLP metrics: Dynatrace requires DELTA temporality (cumulative -> HTTP 400).
+    # Default on now that temporality is correct; disable with DT_OTLP_METRICS=false.
+    if os.getenv("DT_OTLP_METRICS", "true").strip().lower() in {"1", "true", "yes", "on"}:
+        try:
+            from opentelemetry.sdk.metrics import (
+                Counter,
+                Histogram,
+                ObservableCounter,
+                ObservableGauge,
+                ObservableUpDownCounter,
+                UpDownCounter,
+            )
+            from opentelemetry.sdk.metrics.export import AggregationTemporality
+
+            delta = AggregationTemporality.DELTA
+            preferred_temporality = {
+                Counter: delta,
+                UpDownCounter: delta,
+                Histogram: delta,
+                ObservableCounter: delta,
+                ObservableUpDownCounter: delta,
+                ObservableGauge: delta,
+            }
+            metric_exporter = OTLPMetricExporter(
+                endpoint=metrics_endpoint,
+                headers=headers,
+                preferred_temporality=preferred_temporality,
+            )
+        except Exception:
+            # Fallback: env-based delta preference if the import/signature differs.
+            os.environ.setdefault("OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE", "delta")
+            metric_exporter = OTLPMetricExporter(endpoint=metrics_endpoint, headers=headers)
+        metric_reader = PeriodicExportingMetricReader(metric_exporter)
         metrics.set_meter_provider(
             MeterProvider(resource=resource, metric_readers=[metric_reader])
         )
