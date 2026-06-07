@@ -6,6 +6,7 @@ import base64
 from datetime import UTC
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -214,7 +215,7 @@ def open_github_pr(
     config: AegisConfig | None = None,
 ) -> dict[str, Any]:
     config = config or get_config()
-    target_path = "aegis/demo_app/payment_client.py"
+    target_path = os.getenv("AEGIS_PR_TARGET_PATH", "demo_app/payment_client.py")
     new_content = _build_hardened_payment_client()
 
     if not config.has_github:

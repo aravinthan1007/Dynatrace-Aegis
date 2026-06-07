@@ -441,6 +441,23 @@ def get_burn_rate(config: AegisConfig | None = None) -> float:
     return _run_blocking(fetch_burn_rate(config))
 
 
+def query_dql(query: str, config: AegisConfig | None = None) -> list[dict[str, Any]]:
+    """Run a DQL query against the tenant and return rows (loop-safe, best-effort)."""
+
+    async def _run() -> list[dict[str, Any]]:
+        cfg = config or get_config()
+        if not cfg.has_dynatrace:
+            return []
+        async with DynatraceMcpClient(cfg) as client:
+            result = await client.execute_dql(query)
+            return extract_rows(result.structured_content) or extract_rows(result.raw)
+
+    try:
+        return _run_blocking(_run())
+    except Exception:
+        return []
+
+
 def list_dynatrace_tools(config: AegisConfig | None = None) -> list[str]:
     async def _run() -> list[str]:
         cfg = config or get_config()

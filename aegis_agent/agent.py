@@ -27,6 +27,7 @@ from .actions import write_scorecard
 from .config import get_config
 from .dynatrace import create_notebook
 from .dynatrace import list_dynatrace_tools
+from .dynatrace import query_dql
 from .events import event_bus
 from .experiment import run_experiment
 
@@ -279,15 +280,24 @@ def apply_hardening_fix() -> dict[str, Any]:
     return result
 
 
-def verify_after_fix(context: dict[str, Any]) -> dict[str, Any]:
-    """Re-run the experiment against the hardened service to prove the fix works.
+def verify_after_fix(context: dict[str, Any], scenario: str = "pass") -> dict[str, Any]:
+    """Re-run the experiment against the hardened service.
 
-    Injects transient dependency failures (which timeout+retry is designed to
-    absorb) and expects the burn to stay under the abort threshold = PASSED.
+    scenario="pass": inject transient dependency *failures* — timeout+retry absorbs
+    them, so burn stays low = PASSED (the fix holds).
+    scenario="fail": inject sustained *latency* — timeout+retry does NOT mitigate
+    latency, so burn climbs and the run aborts = fix NOT confirmed. This shows
+    Aegis honestly catching an insufficient fix.
     """
 
-    # Clear the burn window so verify reflects only the hardened behavior, then
-    # let a little clean traffic accumulate before injecting failures.
+    if scenario == "fail":
+        latency_ms, error_rate = context.get("recommended_latency_ms", 650), 0.0
+        fault_desc = f"latency={latency_ms}ms (which timeout+retry cannot mitigate)"
+    else:
+        latency_ms, error_rate = 0, config.verify_error_rate
+        fault_desc = f"error_rate={error_rate} (which timeout+retry absorbs)"
+
+    # Clear the burn window so verify reflects only the hardened behavior.
     reset = reset_metrics(config=config)
     event_bus.publish(
         {
@@ -295,19 +305,20 @@ def verify_after_fix(context: dict[str, Any]) -> dict[str, Any]:
             "phase": "verify",
             "text": (
                 f"Cleared burn window ({reset.get('status')}). Re-running {context['target']} "
-                f"with injected error_rate={config.verify_error_rate} against the hardened client."
+                f"with injected {fault_desc} against the hardened client [{scenario} scenario]."
             ),
         }
     )
     time.sleep(config.verify_warmup_seconds)
     result = run_experiment_tool(
         target=context["target"],
-        latency_ms=0,
+        latency_ms=latency_ms,
         burn_abort=config.burn_abort,
-        error_rate=config.verify_error_rate,
+        error_rate=error_rate,
         poll_seconds=2,
         max_duration_s=16,
     )
+    result["scenario"] = scenario
     event_bus.publish(
         {
             "type": "reasoning",
@@ -350,7 +361,122 @@ def post_summary_to_slack(summary: str) -> dict[str, Any]:
     return post_slack(summary, config=config)
 
 
-def run_aegis_game_day() -> dict[str, Any]:
+def _build_and_publish_notebook(
+    context, experiment_result, scorecard, verify_result, verify_scorecard, fix_confirmed, scenario
+) -> dict[str, Any]:
+    """Create a Dynatrace notebook with real Grail metrics + a why/what narrative."""
+
+    svc = config.otel_service_name
+    summary_q = (
+        f'fetch spans, from:now()-1h | filter service.name == "{svc}" '
+        f"| summarize requests = count(), avg_ms = avg(duration)/1000000, "
+        f"p95_ms = percentile(duration, 95)/1000000"
+    )
+    by_ep_q = (
+        f'fetch spans, from:now()-1h | filter service.name == "{svc}" '
+        f"| summarize requests = count(), by:{{span.name}} | sort requests desc"
+    )
+
+    metrics_row = None
+    try:
+        rows = query_dql(summary_q, config)
+        metrics_row = rows[0] if rows else None
+    except Exception:
+        metrics_row = None
+
+    def _fmt(value, suffix=""):
+        try:
+            return f"{float(value):,.1f}{suffix}"
+        except (TypeError, ValueError):
+            return "n/a"
+
+    if metrics_row:
+        live = (
+            f"- **Requests (last 1h):** {_fmt(metrics_row.get('requests'))}\n"
+            f"- **Avg latency:** {_fmt(metrics_row.get('avg_ms'), ' ms')}\n"
+            f"- **p95 latency:** {_fmt(metrics_row.get('p95_ms'), ' ms')}\n"
+        )
+    else:
+        live = "_No spans in Grail for the last hour yet (ingest lag); the DQL cells below will populate shortly._\n"
+
+    cand_lines = "\n".join(
+        f"- `{c['edge']}` — risk {c['risk_score']}, bad {c['bad_ratio'] * 100:.1f}%, "
+        f"p95 {c['p95_ms']:.0f}ms, hardened={'yes' if c['hardened'] else 'no'}"
+        for c in context.get("candidates", [])
+    )
+    fault = (
+        f"{experiment_result['latency_ms']}ms latency"
+        if experiment_result.get("latency_ms")
+        else f"error_rate {experiment_result.get('error_rate')}"
+    )
+    verify_fault = (
+        "sustained latency (which timeout+retry cannot mitigate)"
+        if scenario == "fail"
+        else "transient dependency failures (which timeout+retry absorbs)"
+    )
+    md = f"""# Aegis Game Day — {context['target']}
+_Autonomous resilience game day • Google ADK + Gemini • validated against Dynatrace ({config.dt_environment})._
+
+## Verdict
+| Phase | Result | Peak burn | Abort threshold |
+|---|---|---|---|
+| Pre-fix (unhardened) | {scorecard['verdict']} | {experiment_result['peak_burn']} | {experiment_result['burn_abort']} |
+| Post-fix ({scenario}) | {verify_scorecard['verdict']} | {verify_result['peak_burn']} | {verify_result['burn_abort']} |
+
+**Fix confirmed: {fix_confirmed}**
+
+## Why this dependency (what Aegis chose, and why)
+{context['rationale']}
+
+Ranked candidates:
+{cand_lines}
+
+## What happened
+- **Hypothesis:** {context['hypothesis']}
+- **Fault injected:** {fault} on `{context['target']}`.
+- The error-budget **burn rate** climbed to **{experiment_result['peak_burn']}** (threshold {experiment_result['burn_abort']}); the deterministic safety loop **auto-aborted** and rolled the fault back.
+
+## The fix
+A **timeout (2s) + 3-retry** policy on the `{context['target']}` client (proposed as a GitHub PR).
+
+## Verification ({scenario} scenario)
+Re-ran against the hardened client with **{verify_fault}** → **{verify_scorecard['verdict']}** (peak burn {verify_result['peak_burn']}).
+{"The fix holds." if fix_confirmed else "Aegis flagged the fix as **insufficient** for this fault class."}
+
+## Live Dynatrace metrics — service `{svc}` (last 1h)
+{live}
+The cells below query Grail directly:
+```
+{summary_q}
+```
+```
+{by_ep_q}
+```
+"""
+    notebook = create_dynatrace_notebook(
+        f"Aegis Game Day — {context['target']} ({scenario})", md, [summary_q, by_ep_q], config=config
+    )
+    event_bus.publish(
+        {
+            "type": "link",
+            "kind": "dynatrace_notebook",
+            "label": "Dynatrace notebook",
+            "url": notebook.get("url"),
+            "status": notebook.get("status"),
+        }
+    )
+    event_bus.publish(
+        {
+            "type": "reasoning",
+            "phase": "notebook",
+            "text": f"Dynatrace notebook {notebook.get('status')}"
+            + (f": {notebook['url']}" if notebook.get("url") else ""),
+        }
+    )
+    return notebook
+
+
+def run_aegis_game_day(scenario: str = "pass") -> dict[str, Any]:
     # Start from a clean, unhardened state so the demo is repeatable.
     set_hardening(False, config=config)
 
@@ -382,7 +508,7 @@ def run_aegis_game_day() -> dict[str, Any]:
 
     # 3) Apply the fix and verify it actually holds (closed loop).
     hardening = apply_hardening_fix()
-    verify_result = verify_after_fix(context)
+    verify_result = verify_after_fix(context, scenario=scenario)
     verify_scorecard = create_game_day_scorecard(verify_result, label="post-fix")
 
     fix_confirmed = experiment_result["aborted"] and not verify_result["aborted"]
@@ -398,43 +524,8 @@ def run_aegis_game_day() -> dict[str, Any]:
         }
     )
 
-    # Create a Dynatrace notebook (LLM-style summary + DQL) and surface its link.
-    notebook_md = (
-        f"# Aegis Game Day — {context['target']}\n\n"
-        f"**Pre-fix:** {scorecard['verdict']} (peak burn {experiment_result['peak_burn']}, "
-        f"abort threshold {experiment_result['burn_abort']})\n\n"
-        f"**Post-fix:** {verify_scorecard['verdict']} (peak burn {verify_result['peak_burn']})\n\n"
-        f"**Fix confirmed:** {fix_confirmed}\n\n"
-        f"## Why this target\n{context['rationale']}\n\n"
-        f"## Hypothesis\n{context['hypothesis']}\n"
-    )
-    dql_queries = [
-        f'fetch spans, from:now()-1h | filter service.name == "{config.otel_service_name}" '
-        f"| summarize requests = count(), by:{{span.name}}",
-        f'fetch spans, from:now()-1h | filter service.name == "{config.otel_service_name}" '
-        f"| summarize avg(duration), p95 = percentile(duration, 95)",
-    ]
-    notebook = create_dynatrace_notebook(
-        f"Aegis Game Day — {context['target']}", notebook_md, dql_queries, config=config
-    )
-    event_bus.publish(
-        {
-            "type": "link",
-            "kind": "dynatrace_notebook",
-            "label": "Dynatrace notebook",
-            "url": notebook.get("url"),
-            "status": notebook.get("status"),
-        }
-    )
-    event_bus.publish(
-        {
-            "type": "reasoning",
-            "phase": "notebook",
-            "text": (
-                f"Dynatrace notebook {notebook.get('status')}"
-                + (f": {notebook['url']}" if notebook.get("url") else "")
-            ),
-        }
+    notebook = _build_and_publish_notebook(
+        context, experiment_result, scorecard, verify_result, verify_scorecard, fix_confirmed, scenario
     )
 
     slack_result = post_summary_to_slack(

@@ -145,6 +145,7 @@
 
     <div class="controls">
       <button id="runButton">▶ Run Game Day</button>
+      <button class="secondary" id="failButton">⚠ Run Fail Scenario</button>
       <button class="secondary" id="approveButton" disabled>✋ Approve Injection</button>
       <span class="hint" id="statusText">Idle — ready to run.</span>
     </div>
@@ -345,16 +346,20 @@
       source.onopen = () => { $("connDot").className = "dot live"; $("connText").textContent = "live feed"; };
       source.onerror = () => { $("connDot").className = "dot fallback"; $("connText").textContent = "reconnecting…"; };
 
-      $("runButton").addEventListener("click", async () => {
-        // reset UI
+      function resetUI() {
         abortBanner.style.display = "none"; runIndex = 0; samples = []; peak = 0;
         $("links").innerHTML = "";
         ["rank","approve","inject","abort","harden","verify"].forEach(k=>setStep(k,""));
         $("preVerdict").textContent="—"; $("preVerdict").className="v"; $("postVerdict").textContent="—"; $("postVerdict").className="v";
         $("prePeak").textContent=""; $("postPeak").textContent="";
-        statusText.textContent = "Starting game day via Google ADK…";
-        await fetch("/run-agent", { method: "POST" });
-      });
+      }
+      async function startGameDay(endpoint, label) {
+        resetUI(); statusText.textContent = label; await fetch(endpoint, { method: "POST" });
+      }
+      $("runButton").addEventListener("click", () =>
+        startGameDay("/run-agent", "Starting game day via Google ADK…"));
+      $("failButton").addEventListener("click", () =>
+        startGameDay("/run-fail", "Starting FAIL scenario (fix won't hold)…"));
       $("approveButton").addEventListener("click", async () => {
         await fetch("/approve", { method: "POST" });
         $("approveButton").disabled = true; $("approveButton").classList.remove("pulse");

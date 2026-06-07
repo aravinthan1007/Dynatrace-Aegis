@@ -131,6 +131,21 @@ async def run_demo() -> dict:
     return {"status": "started"}
 
 
+@app.post("/run-fail")
+async def run_fail() -> dict:
+    """Run the game day in the FAIL scenario (the fix does not hold)."""
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(None, lambda: run_aegis_game_day("fail"))
+    event_bus.publish(
+        {
+            "type": "reasoning",
+            "phase": "init",
+            "text": "Aegis game day started in FAIL scenario. Waiting for approval before fault injection.",
+        }
+    )
+    return {"status": "started", "scenario": "fail"}
+
+
 @app.post("/run-agent")
 async def run_agent() -> dict:
     """Run the game day through the Google ADK Runner (Gemini drives the tools)."""
