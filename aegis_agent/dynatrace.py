@@ -263,7 +263,7 @@ def _burn_from_rows(rows: list[dict[str, Any]], config: AegisConfig) -> float | 
 
 async def fetch_burn_rate(config: AegisConfig | None = None) -> float:
     config = config or get_config()
-    if config.has_dynatrace:
+    if config.has_dynatrace and config.burn_use_dynatrace:
         query = build_burn_rate_query(config)
         try:
             async with DynatraceMcpClient(config) as client:
@@ -334,7 +334,10 @@ class BurnRateSampler:
         self._alpha = alpha if alpha is not None else config.burn_smoothing_alpha
 
     async def __aenter__(self) -> "BurnRateSampler":
-        if self.config.has_dynatrace:
+        # Live burn defaults to the realtime local SLI (Grail ingest lags, and
+        # opening the MCP per experiment adds latency). Enable DQL-driven burn with
+        # BURN_USE_DYNATRACE=true.
+        if self.config.has_dynatrace and self.config.burn_use_dynatrace:
             try:
                 client = DynatraceMcpClient(self.config)
                 await client.connect()

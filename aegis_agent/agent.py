@@ -147,7 +147,10 @@ def gather_dynatrace_context() -> dict[str, Any]:
     way the target is derived from real numbers rather than hardcoded.
     """
 
-    tool_names = list_dynatrace_tools(config)
+    # Note: we intentionally do NOT open the Dynatrace MCP here — that connect can
+    # be slow and would delay the approval prompt. Candidates come from live demo
+    # metrics; the MCP is used during the experiment (burn) and for the notebook.
+    tool_names: list[str] = []
     candidates = _discover_candidates(config)
 
     ranking_text = "; ".join(
