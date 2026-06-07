@@ -190,8 +190,25 @@ def create_dynatrace_notebook(
             {"id": "summary", "type": "markdown", "markdown": markdown_summary}
         ]
         for i, query in enumerate(dql_queries or []):
-            sections.append({"id": f"dql{i}", "type": "dql", "dql": query})
-        content = {"version": "1", "kind": "notebook", "sections": sections}
+            # Rich DQL section so the notebook renders a chart (auto for timeseries).
+            sections.append(
+                {
+                    "id": f"dql{i}",
+                    "type": "dql",
+                    "dql": query,
+                    "showTitle": True,
+                    "title": f"Query {i + 1}",
+                    "state": {
+                        "input": {"value": query, "timeframe": {"from": "now()-1h", "to": "now()"}},
+                        "visualization": "lineChart",
+                        "visualizationSettings": {
+                            "chartSettings": {"gapPolicy": "connect"},
+                            "visualizationType": "lineChart",
+                        },
+                    },
+                }
+            )
+        content = {"version": "6", "kind": "notebook", "sections": sections}
         with httpx.Client(timeout=40) as client:
             resp = client.post(
                 f"{config.dt_environment}/platform/document/v1/documents",

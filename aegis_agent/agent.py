@@ -364,10 +364,47 @@ def post_summary_to_slack(summary: str) -> dict[str, Any]:
     return post_slack(summary, config=config)
 
 
+def _gemini_notebook_narrative(payload: dict[str, Any]) -> str | None:
+    """Have Gemini (ADK model, on Vertex) write the notebook analysis dynamically."""
+    try:
+        from google import genai
+
+        use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").strip().lower() in {"1", "true", "yes", "on"}
+        if use_vertex:
+            client = genai.Client(
+                vertexai=True,
+                project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+                location=os.getenv("GOOGLE_CLOUD_LOCATION", "global"),
+            )
+        elif config.google_api_key:
+            client = genai.Client(api_key=config.google_api_key)
+        else:
+            return None
+        prompt = (
+            "You are a senior Site Reliability Engineer writing a Dynatrace notebook "
+            "after an automated chaos game day. Using ONLY the JSON data below, write a "
+            "clear, specific Markdown report with these sections: '## Executive summary', "
+            "'## Why this dependency was targeted', '## What happened', '## The fix and why', "
+            "'## Verification & verdict', and '## What the live Dynatrace metrics show'. "
+            "Cite the actual numbers (peak burn, threshold, latency, p95, request count). "
+            "Be concise and concrete. Do not invent data not present.\n\n"
+            f"DATA:\n{json.dumps(payload, indent=2)}"
+        )
+        resp = client.models.generate_content(model=config.gemini_model, contents=prompt)
+        text = (getattr(resp, "text", "") or "").strip()
+        return text or None
+    except Exception as exc:
+        event_bus.publish(
+            {"type": "message", "level": "warning", "source": "gemini",
+             "text": f"Gemini notebook narrative unavailable, using template: {exc}"}
+        )
+        return None
+
+
 def _build_and_publish_notebook(
     context, experiment_result, scorecard, verify_result, verify_scorecard, fix_confirmed, scenario
 ) -> dict[str, Any]:
-    """Create a Dynatrace notebook with real Grail metrics + a why/what narrative."""
+    """Create a Dynatrace notebook: Gemini-written narrative + real Grail metric graphs."""
 
     svc = config.otel_service_name
     summary_q = (
@@ -417,10 +454,39 @@ def _build_and_publish_notebook(
         if scenario == "fail"
         else "transient dependency failures (which timeout+retry absorbs)"
     )
-    md = f"""# Aegis Game Day — {context['target']}
-_Autonomous resilience game day • Google ADK + Gemini • validated against Dynatrace ({config.dt_environment})._
+    # Graph-friendly timeseries queries — these render as line charts in the notebook.
+    ts_requests = (
+        f'fetch spans, from:now()-1h | filter service.name == "{svc}" '
+        f"| makeTimeseries request_count = count(), interval:1m"
+    )
+    ts_latency = (
+        f'fetch spans, from:now()-1h | filter service.name == "{svc}" '
+        f"| makeTimeseries p95_latency_ms = percentile(duration, 95)/1000000, interval:1m"
+    )
 
-## Verdict
+    payload = {
+        "target": context["target"],
+        "rationale": context.get("rationale"),
+        "hypothesis": context.get("hypothesis"),
+        "candidates": context.get("candidates"),
+        "scenario": scenario,
+        "pre_fix": {
+            "verdict": scorecard["verdict"],
+            "peak_burn": experiment_result["peak_burn"],
+            "abort_threshold": experiment_result["burn_abort"],
+            "fault_injected": fault,
+        },
+        "post_fix": {
+            "verdict": verify_scorecard["verdict"],
+            "peak_burn": verify_result["peak_burn"],
+            "verify_fault": verify_fault,
+        },
+        "fix": "timeout 2s + 3 retries on the dependency client",
+        "fix_confirmed": fix_confirmed,
+        "live_metrics_last_1h": metrics_row or {},
+    }
+
+    template_md = f"""## Verdict
 | Phase | Result | Peak burn | Abort threshold |
 |---|---|---|---|
 | Pre-fix (unhardened) | {scorecard['verdict']} | {experiment_result['peak_burn']} | {experiment_result['burn_abort']} |
@@ -428,7 +494,7 @@ _Autonomous resilience game day • Google ADK + Gemini • validated against Dy
 
 **Fix confirmed: {fix_confirmed}**
 
-## Why this dependency (what Aegis chose, and why)
+## Why this dependency
 {context['rationale']}
 
 Ranked candidates:
@@ -436,28 +502,27 @@ Ranked candidates:
 
 ## What happened
 - **Hypothesis:** {context['hypothesis']}
-- **Fault injected:** {fault} on `{context['target']}`.
-- The error-budget **burn rate** climbed to **{experiment_result['peak_burn']}** (threshold {experiment_result['burn_abort']}); the deterministic safety loop **auto-aborted** and rolled the fault back.
+- **Fault injected:** {fault} on `{context['target']}`; burn climbed to **{experiment_result['peak_burn']}** (threshold {experiment_result['burn_abort']}) and the deterministic loop auto-aborted.
 
-## The fix
-A **timeout (2s) + 3-retry** policy on the `{context['target']}` client (proposed as a GitHub PR).
+## The fix & verification ({scenario})
+Timeout (2s) + 3 retries; re-ran with {verify_fault} → **{verify_scorecard['verdict']}** (peak burn {verify_result['peak_burn']})."""
 
-## Verification ({scenario} scenario)
-Re-ran against the hardened client with **{verify_fault}** → **{verify_scorecard['verdict']}** (peak burn {verify_result['peak_burn']}).
-{"The fix holds." if fix_confirmed else "Aegis flagged the fix as **insufficient** for this fault class."}
+    narrative = _gemini_notebook_narrative(payload)
+    authored_by = "Gemini (Google ADK, Vertex AI)" if narrative else "Aegis (deterministic template)"
+    body = narrative or template_md
+    md = (
+        f"# Aegis Game Day — {context['target']}\n"
+        f"_Authored by **{authored_by}** • validated against Dynatrace ({config.dt_environment})._\n\n"
+        f"{body}\n\n"
+        f"## Live Dynatrace metrics — `{svc}` (last 1h)\n{live}\n"
+        f"The charts below query Grail live — request rate and p95 latency over time:\n"
+    )
 
-## Live Dynatrace metrics — service `{svc}` (last 1h)
-{live}
-The cells below query Grail directly:
-```
-{summary_q}
-```
-```
-{by_ep_q}
-```
-"""
     notebook = create_dynatrace_notebook(
-        f"Aegis Game Day — {context['target']} ({scenario})", md, [summary_q, by_ep_q], config=config
+        f"Aegis Game Day — {context['target']} ({scenario})",
+        md,
+        [ts_requests, ts_latency, by_ep_q],
+        config=config,
     )
     event_bus.publish(
         {
