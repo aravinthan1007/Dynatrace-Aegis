@@ -1,0 +1,16 @@
+[
+  {
+    "query": "Which service dependency is the riskiest to chaos-test right now, and why? Use your tools.",
+    "expected_tool_use": [
+      { "tool_name": "gather_dynatrace_context", "tool_input": {} }
+    ],
+    "reference": "payment->store is the riskiest dependency: it sits on the request path and has no timeout or retry hardening, so it ranks highest."
+  },
+  {
+    "query": "Before any chaos test, identify the top-risk dependency for the demo service.",
+    "expected_tool_use": [
+      { "tool_name": "gather_dynatrace_context", "tool_input": {} }
+    ],
+    "reference": "The top-risk dependency is payment->store, chosen from the measured candidate ranking."
+  }
+]

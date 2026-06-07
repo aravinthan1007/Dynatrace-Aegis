@@ -1,0 +1,5 @@
+# Extra deps for running the ADK AgentEvaluator trajectory eval (tests/test_agent_eval.py).
+# The hermetic decision evals (tests/test_decision_eval.py) need none of these.
+google-adk[eval]
+pandas
+rouge_score
