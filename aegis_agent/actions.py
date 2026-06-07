@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from datetime import UTC
 from datetime import datetime
+import json
 from pathlib import Path
 import re
 from typing import Any
@@ -144,6 +145,65 @@ class PaymentClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 '''
+
+
+def _dt_oauth_bearer(config: AegisConfig, scope: str) -> str | None:
+    """Exchange the Dynatrace OAuth client for a short-lived bearer token."""
+    if not (config.dt_oauth_client_id and config.dt_oauth_client_secret):
+        return None
+    with httpx.Client(timeout=30) as client:
+        resp = client.post(
+            "https://sso.dynatrace.com/sso/oauth2/token",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": config.dt_oauth_client_id,
+                "client_secret": config.dt_oauth_client_secret,
+                "scope": scope,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json().get("access_token")
+
+
+def create_dynatrace_notebook(
+    title: str,
+    markdown_summary: str,
+    dql_queries: list[str] | None = None,
+    *,
+    config: AegisConfig | None = None,
+) -> dict[str, Any]:
+    """Create a Dynatrace notebook (platform document) with an LLM/summary + DQL.
+
+    Uses the OAuth client-credentials flow, so it works headless from Cloud Run.
+    Returns a dict with the notebook URL, or a dry-run/error status.
+    """
+
+    config = config or get_config()
+    if not (config.dt_environment and config.dt_oauth_client_id and config.dt_oauth_client_secret):
+        return {"status": "dry-run", "detail": "Dynatrace OAuth client not configured."}
+    try:
+        bearer = _dt_oauth_bearer(config, "document:documents:read document:documents:write")
+        if not bearer:
+            return {"status": "dry-run", "detail": "Could not obtain Dynatrace bearer token."}
+        sections: list[dict[str, Any]] = [
+            {"id": "summary", "type": "markdown", "markdown": markdown_summary}
+        ]
+        for i, query in enumerate(dql_queries or []):
+            sections.append({"id": f"dql{i}", "type": "dql", "dql": query})
+        content = {"version": "1", "kind": "notebook", "sections": sections}
+        with httpx.Client(timeout=40) as client:
+            resp = client.post(
+                f"{config.dt_environment}/platform/document/v1/documents",
+                headers={"Authorization": f"Bearer {bearer}"},
+                files={"content": ("aegis.notebook", json.dumps(content), "application/json")},
+                data={"name": title, "type": "notebook"},
+            )
+            resp.raise_for_status()
+            doc_id = resp.json().get("id")
+        url = f"{config.dt_environment}/ui/apps/dynatrace.notebooks/notebook/{doc_id}"
+        return {"status": "created", "id": doc_id, "url": url}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)[:300]}
 
 
 def open_github_pr(

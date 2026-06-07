@@ -41,6 +41,7 @@ class AegisConfig:
     burn_smoothing_alpha: float
     verify_error_rate: float
     verify_warmup_seconds: float
+    otel_service_name: str
     approval_timeout_s: int
     mcp_timeout_seconds: float
     reports_dir: Path
@@ -91,6 +92,7 @@ def get_config() -> AegisConfig:
         burn_smoothing_alpha=float(os.getenv("BURN_SMOOTHING_ALPHA", "0.5")),
         verify_error_rate=float(os.getenv("VERIFY_ERROR_RATE", "0.25")),
         verify_warmup_seconds=float(os.getenv("VERIFY_WARMUP_SECONDS", "5")),
+        otel_service_name=os.getenv("OTEL_SERVICE_NAME", "aegis-demo-app").strip(),
         approval_timeout_s=int(os.getenv("AEGIS_APPROVAL_TIMEOUT_S", "900")),
         mcp_timeout_seconds=float(os.getenv("AEGIS_MCP_TIMEOUT_SECONDS", "90")),
         reports_dir=Path(os.getenv("AEGIS_REPORTS_DIR", "runtime_artifacts")),

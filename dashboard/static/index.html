@@ -57,6 +57,11 @@
       button.pulse { animation: pulse 1.1s infinite; }
       @keyframes pulse { 0%,100%{ box-shadow: 0 0 0 0 rgba(123,224,183,0.6);} 50%{ box-shadow: 0 0 0 10px rgba(123,224,183,0);} }
       .hint { color: var(--muted); font-size: 0.85rem; }
+      .links { display: flex; gap: 10px; flex-wrap: wrap; padding: 4px 24px 0; }
+      .linkchip { font-size: 0.82rem; padding: 8px 14px; border-radius: 999px; text-decoration: none;
+        background: rgba(140,184,255,0.14); border: 1px solid var(--panel-border); color: var(--accent2); font-weight: 600; }
+      .linkchip.muted { background: rgba(255,255,255,0.04); color: var(--muted); font-weight: 500; }
+      a.linkchip[href]:hover { background: rgba(140,184,255,0.28); }
 
       /* Pipeline stepper */
       .pipeline { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; padding: 12px 24px 4px; }
@@ -143,6 +148,8 @@
       <button class="secondary" id="approveButton" disabled>✋ Approve Injection</button>
       <span class="hint" id="statusText">Idle — ready to run.</span>
     </div>
+
+    <div class="links" id="links"></div>
 
     <div class="pipeline" id="pipeline"></div>
 
@@ -285,10 +292,19 @@
         drawChart();
       }
 
+      function renderLink(e) {
+        const wrap = $("links");
+        let a = document.getElementById("link-" + e.kind);
+        if (!a) { a = document.createElement("a"); a.id = "link-" + e.kind; a.className = "linkchip"; a.target = "_blank"; a.rel = "noopener"; wrap.appendChild(a); }
+        if (e.url) { a.href = e.url; a.classList.remove("muted"); a.textContent = "🔗 " + (e.label || e.kind); }
+        else { a.removeAttribute("href"); a.classList.add("muted"); a.textContent = (e.label || e.kind) + " — " + (e.status || "pending"); }
+      }
+
       const source = new EventSource("/events");
       source.onmessage = (m) => {
         const e = JSON.parse(m.data);
         addEvent(e);
+        if (e.type === "link") renderLink(e);
         if (e.type === "candidates" && e.candidates) renderCandidates(e.candidates);
         if (e.type === "reasoning") {
           const p = e.phase;
@@ -332,6 +348,7 @@
       $("runButton").addEventListener("click", async () => {
         // reset UI
         abortBanner.style.display = "none"; runIndex = 0; samples = []; peak = 0;
+        $("links").innerHTML = "";
         ["rank","approve","inject","abort","harden","verify"].forEach(k=>setStep(k,""));
         $("preVerdict").textContent="—"; $("preVerdict").className="v"; $("postVerdict").textContent="—"; $("postVerdict").className="v";
         $("prePeak").textContent=""; $("postPeak").textContent="";

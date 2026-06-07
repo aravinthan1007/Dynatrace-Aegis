@@ -239,6 +239,28 @@ def extract_rows(payload: Any) -> list[dict[str, Any]]:
     return []
 
 
+def _burn_from_rows(rows: list[dict[str, Any]], config: AegisConfig) -> float | None:
+    """Burn rate from a DQL result, or None when Grail has no records yet.
+
+    Returning None on total==0 lets callers fall back to the realtime local SLI,
+    so the chart still moves during an experiment despite Grail ingest lag.
+    """
+    if not rows:
+        return None
+    row = rows[0]
+    try:
+        total = float(row.get("total", 0) or 0)
+    except (TypeError, ValueError):
+        total = 0.0
+    if total <= 0:
+        return None
+    if row.get("burn_rate") is not None:
+        return float(row["burn_rate"])
+    if row.get("bad_ratio") is not None:
+        return float(row["bad_ratio"]) / max(1.0 - config.slo_target, 0.000001)
+    return None
+
+
 async def fetch_burn_rate(config: AegisConfig | None = None) -> float:
     config = config or get_config()
     if config.has_dynatrace:
@@ -252,13 +274,9 @@ async def fetch_burn_rate(config: AegisConfig | None = None) -> float:
                     _VERIFIED_QUERIES.add(query)
                 result = await client.execute_dql(query)
                 rows = extract_rows(result.structured_content) or extract_rows(result.raw)
-                if rows:
-                    row = rows[0]
-                    if "burn_rate" in row:
-                        return float(row["burn_rate"])
-                    if "bad_ratio" in row:
-                        bad_ratio = float(row["bad_ratio"])
-                        return bad_ratio / max(1.0 - config.slo_target, 0.000001)
+                burn = _burn_from_rows(rows, config)
+                if burn is not None:
+                    return burn
         except Exception as exc:
             event_bus.publish(
                 {
@@ -357,12 +375,11 @@ class BurnRateSampler:
                     self._verified = True
                 result = await self._dt.execute_dql(self._query)
                 rows = extract_rows(result.structured_content) or extract_rows(result.raw)
-                if rows:
-                    row = rows[0]
-                    if "burn_rate" in row:
-                        return float(row["burn_rate"])
-                    if "bad_ratio" in row:
-                        return float(row["bad_ratio"]) / max(1.0 - self.config.slo_target, 0.000001)
+                burn = _burn_from_rows(rows, self.config)
+                if burn is not None:
+                    return burn
+                # total == 0 (no Grail data yet) -> use the realtime local SLI
+                return await self._sample_local()
             except Exception as exc:
                 event_bus.publish(
                     {

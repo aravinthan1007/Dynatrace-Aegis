@@ -17,6 +17,7 @@ try:
 except ImportError:  # pragma: no cover - depends on ADK version
     from google.adk.agents import Agent as BaseAgent
 
+from .actions import create_dynatrace_notebook
 from .actions import get_service_metrics
 from .actions import open_github_pr
 from .actions import post_slack
@@ -385,6 +386,57 @@ def run_aegis_game_day() -> dict[str, Any]:
     verify_scorecard = create_game_day_scorecard(verify_result, label="post-fix")
 
     fix_confirmed = experiment_result["aborted"] and not verify_result["aborted"]
+
+    # Surface the GitHub PR link to the UI (real url when configured, else dry-run).
+    event_bus.publish(
+        {
+            "type": "link",
+            "kind": "github_pr",
+            "label": "Hardening PR",
+            "url": pr_result.get("url"),
+            "status": pr_result.get("status"),
+        }
+    )
+
+    # Create a Dynatrace notebook (LLM-style summary + DQL) and surface its link.
+    notebook_md = (
+        f"# Aegis Game Day — {context['target']}\n\n"
+        f"**Pre-fix:** {scorecard['verdict']} (peak burn {experiment_result['peak_burn']}, "
+        f"abort threshold {experiment_result['burn_abort']})\n\n"
+        f"**Post-fix:** {verify_scorecard['verdict']} (peak burn {verify_result['peak_burn']})\n\n"
+        f"**Fix confirmed:** {fix_confirmed}\n\n"
+        f"## Why this target\n{context['rationale']}\n\n"
+        f"## Hypothesis\n{context['hypothesis']}\n"
+    )
+    dql_queries = [
+        f'fetch spans, from:now()-1h | filter service.name == "{config.otel_service_name}" '
+        f"| summarize requests = count(), by:{{span.name}}",
+        f'fetch spans, from:now()-1h | filter service.name == "{config.otel_service_name}" '
+        f"| summarize avg(duration), p95 = percentile(duration, 95)",
+    ]
+    notebook = create_dynatrace_notebook(
+        f"Aegis Game Day — {context['target']}", notebook_md, dql_queries, config=config
+    )
+    event_bus.publish(
+        {
+            "type": "link",
+            "kind": "dynatrace_notebook",
+            "label": "Dynatrace notebook",
+            "url": notebook.get("url"),
+            "status": notebook.get("status"),
+        }
+    )
+    event_bus.publish(
+        {
+            "type": "reasoning",
+            "phase": "notebook",
+            "text": (
+                f"Dynatrace notebook {notebook.get('status')}"
+                + (f": {notebook['url']}" if notebook.get("url") else "")
+            ),
+        }
+    )
+
     slack_result = post_summary_to_slack(
         f"Aegis game day on {context['target']}: pre-fix peak burn "
         f"{experiment_result['peak_burn']} ({scorecard['verdict']}), post-fix peak burn "
@@ -411,6 +463,7 @@ def run_aegis_game_day() -> dict[str, Any]:
         "verify_result": verify_result,
         "verify_scorecard": verify_scorecard,
         "fix_confirmed": fix_confirmed,
+        "notebook": notebook,
         "slack": slack_result,
     }
 
