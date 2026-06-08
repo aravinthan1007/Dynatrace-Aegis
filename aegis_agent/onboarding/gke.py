@@ -46,6 +46,7 @@ except ImportError:  # pragma: no cover
 
 from ..config import get_config
 from ..dynatrace import query_dql
+from ..dynatrace_skills import build_post_onboarding_queries, get_dynatrace_skill_context
 from ..events import event_bus
 
 config = get_config()
@@ -597,6 +598,11 @@ INSTRUCTION = dedent(
     final Dynatrace verification. If verification shows has_data=false, explain that GCP
     ingest may still be propagating or the tenant must retain the data — never invent
     success, and never print the access token.
+
+    For post-onboarding validation, eval/test-case generation, or troubleshooting
+    questions, use the curated Dynatrace skill helpers. They provide DQL and
+    observability guidance only; live Google Cloud mutations must stay in the
+    deterministic onboarding tools.
     """
 ).strip()
 
@@ -605,7 +611,11 @@ root_agent = BaseAgent(
     model=config.gemini_model,
     description="Self-healing single-click Dynatrace GCP metric+log onboarding on a new GKE Autopilot cluster, verified via the Dynatrace MCP.",
     instruction=INSTRUCTION,
-    tools=[FunctionTool(onboard_gke_autopilot)],
+    tools=[
+        FunctionTool(onboard_gke_autopilot),
+        FunctionTool(get_dynatrace_skill_context),
+        FunctionTool(build_post_onboarding_queries),
+    ],
 )
 
 app = App(root_agent=root_agent, name="aegis_gke_onboarding")

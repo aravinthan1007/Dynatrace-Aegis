@@ -28,6 +28,7 @@ from .config import get_config
 from .dynatrace import create_notebook
 from .dynatrace import list_dynatrace_tools
 from .dynatrace import query_dql
+from .dynatrace_skills import build_post_onboarding_queries, get_dynatrace_skill_context
 from .events import event_bus
 from .experiment import run_experiment
 
@@ -735,6 +736,9 @@ INSTRUCTION = dedent(
     If Dynatrace MCP tools are available (e.g. execute_dql, list_problems,
     find_entity_by_name), you may call them to enrich the report with live
     observability data, but never let them gate or replace the deterministic abort.
+
+    For test-case generation, post-onboarding checks, or DQL guidance, use the
+    curated Dynatrace skill helpers. They are read-only context and query builders.
     """
 ).strip()
 
@@ -794,6 +798,8 @@ _AEGIS_TOOLS = [
     FunctionTool(verify_after_fix),
     FunctionTool(post_summary_to_slack),
     FunctionTool(run_aegis_game_day),
+    FunctionTool(get_dynatrace_skill_context),
+    FunctionTool(build_post_onboarding_queries),
 ]
 _dt_toolset = _dynatrace_mcp_toolset()
 if _dt_toolset is not None:
