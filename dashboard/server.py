@@ -49,6 +49,35 @@ def _current_project() -> str:
     return os.getenv("GOOGLE_CLOUD_PROJECT", "").strip() or _metadata_value("project/project-id")
 
 
+def _configured_projects() -> list[dict[str, str]]:
+    """Projects configured for the UI.
+
+    Format: AEGIS_GCP_PROJECTS="project-id|Display name|123,other-id|Name|456".
+    Missing name/number fields are allowed.
+    """
+    raw = os.getenv("AEGIS_GCP_PROJECTS", "").strip()
+    projects: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in [part.strip() for part in raw.split(",") if part.strip()]:
+        parts = [part.strip() for part in item.split("|")]
+        project_id = parts[0] if parts else ""
+        if not project_id or project_id in seen:
+            continue
+        seen.add(project_id)
+        projects.append(
+            {
+                "project_id": project_id,
+                "name": parts[1] if len(parts) > 1 else "",
+                "project_number": parts[2] if len(parts) > 2 else "",
+                "source": "configured",
+            }
+        )
+    current = _current_project()
+    if current and current not in seen:
+        projects.insert(0, {"project_id": current, "name": "", "project_number": "", "source": "current"})
+    return projects
+
+
 def _current_region() -> str:
     region = os.getenv("GOOGLE_CLOUD_LOCATION", "").strip()
     if region and region != "global":
@@ -57,6 +86,30 @@ def _current_region() -> str:
     if metadata_region:
         return metadata_region.rsplit("/", 1)[-1]
     return os.getenv("GOOGLE_CLOUD_REGION", "us-central1").strip() or "us-central1"
+
+
+def _merge_project(
+    projects: list[dict[str, str]],
+    project_id: str,
+    name: str = "",
+    project_number: str = "",
+    source: str = "discovered",
+) -> None:
+    if not project_id:
+        return
+    for project in projects:
+        if project["project_id"] == project_id:
+            project["name"] = project.get("name") or name
+            project["project_number"] = project.get("project_number") or project_number
+            return
+    projects.append(
+        {
+            "project_id": project_id,
+            "name": name,
+            "project_number": project_number,
+            "source": source,
+        }
+    )
 
 
 def _github_status() -> dict:
@@ -159,6 +212,7 @@ async def environment_status() -> dict:
     cluster = os.getenv("AEGIS_GKE_CLUSTER", "dynatrace-gcp-monitor")
     return {
         "project": project,
+        "available_projects": _configured_projects(),
         "region": _current_region(),
         "service": service,
         "cluster": cluster,
@@ -197,8 +251,15 @@ def _gcp_list_projects() -> dict:
     """List the project + available GCP projects via the Cloud Run SA (no gcloud)."""
     md = {"Metadata-Flavor": "Google"}
     base = "http://metadata.google.internal/computeMetadata/v1"
-    out: dict = {"projects": [], "current": _current_project(), "dt_environment": config.dt_environment,
-                 "region": _current_region(), "services": os.getenv("AEGIS_ONBOARD_SERVICE", "aegis-demo-app")}
+    configured = _configured_projects()
+    out: dict = {
+        "projects": [p["project_id"] for p in configured],
+        "project_details": configured,
+        "current": _current_project(),
+        "dt_environment": config.dt_environment,
+        "region": _current_region(),
+        "services": os.getenv("AEGIS_ONBOARD_SERVICE", "aegis-demo-app"),
+    }
     token = ""
     try:
         with httpx.Client(timeout=5) as c:
@@ -216,13 +277,21 @@ def _gcp_list_projects() -> dict:
                     params={"filter": "lifecycleState:ACTIVE"},
                 )
             if r.status_code == 200:
-                out["projects"] = [p["projectId"] for p in r.json().get("projects", [])][:50]
+                for p in r.json().get("projects", [])[:50]:
+                    _merge_project(
+                        out["project_details"],
+                        p.get("projectId", ""),
+                        p.get("name", ""),
+                        p.get("projectNumber", ""),
+                    )
+                out["projects"] = [p["project_id"] for p in out["project_details"]]
             else:
                 out["error"] = f"resourcemanager {r.status_code}"
         except Exception as exc:
             out["error"] = f"resourcemanager: {exc}"[:160]
     if not out["projects"] and out["current"]:
         out["projects"] = [out["current"]]
+        out["project_details"] = [{"project_id": out["current"], "name": "", "project_number": "", "source": "current"}]
     return out
 
 

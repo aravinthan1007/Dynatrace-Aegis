@@ -217,6 +217,12 @@
           <div class="metric"><small>Cloud Run service</small><strong id="serviceVal">loading</strong><span id="demoUrl"></span></div>
           <div class="metric"><small>GitHub repo</small><strong id="repoVal">loading</strong><span id="baseVal"></span></div>
         </div>
+        <section class="panel" style="margin-top:14px;">
+          <div class="panel-header"><h2>Available Google Cloud projects</h2><span class="hint">configured for onboarding</span></div>
+          <div class="panel-body">
+            <div class="status-list" id="projectRows"></div>
+          </div>
+        </section>
 
         <div class="grid" style="margin-top:14px;">
           <section class="panel">
@@ -375,7 +381,29 @@
         $("region").value = env.region || "us-central1";
         setDot("dtDot", !!env.dynatrace_configured, false);
         $("dtText").textContent = env.dynatrace_configured ? "configured" : "missing";
+        renderProjects(env.available_projects || [], env.project);
         renderGithub(env.github || {});
+      }
+
+      function renderProjects(projects, current) {
+        const list = $("projectRows");
+        list.innerHTML = "";
+        if (!projects.length) {
+          list.innerHTML = '<div class="status-row"><span class="dot warn"></span><b>No list</b><span>Only the active project could be detected.</span></div>';
+          return;
+        }
+        projects.forEach((project) => {
+          const row = document.createElement("div");
+          row.className = "status-row";
+          const isCurrent = project.project_id === current;
+          const detail = [
+            project.name || "Unnamed project",
+            project.project_number ? "number " + project.project_number : "",
+            project.source ? "source " + project.source : "",
+          ].filter(Boolean).join(" / ");
+          row.innerHTML = `<span class="dot ${isCurrent ? "ok" : ""}"></span><b>${project.project_id}</b><span>${detail}${isCurrent ? " / active Cloud Run project" : ""}</span>`;
+          list.appendChild(row);
+        });
       }
 
       async function loadProjects() {
@@ -383,9 +411,13 @@
           const d = await (await fetch("/gcp-projects")).json();
           const list = $("projectList");
           list.innerHTML = "";
-          (d.projects || []).forEach((project) => {
+          const details = (d.project_details && d.project_details.length)
+            ? d.project_details
+            : (d.projects || []).map((project_id) => ({ project_id }));
+          details.forEach((project) => {
             const option = document.createElement("option");
-            option.value = project;
+            option.value = project.project_id;
+            option.label = [project.name, project.project_number].filter(Boolean).join(" / ");
             list.appendChild(option);
           });
           if (d.current) $("project_id").value = d.current;
