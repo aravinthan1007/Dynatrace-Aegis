@@ -84,6 +84,11 @@ RUN_ADK_EVAL=1 pytest tests/test_agent_eval.py        # ADK AgentEvaluator (need
 RUN_GROUNDING_EVAL=1 pytest tests/test_grounding.py   # data-grounding gate
 ```
 
+## Submission
+
+- Devpost packet: `docs/HACKATHON_SUBMISSION.md`
+- Demo video guide: `docs/DEMO_VIDEO_GUIDE.md`
+
 ## Cloud Run
 
 ```bash
