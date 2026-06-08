@@ -89,6 +89,7 @@ RUN_GROUNDING_EVAL=1 pytest tests/test_grounding.py   # data-grounding gate
 - Devpost packet: `docs/HACKATHON_SUBMISSION.md`
 - Demo video guide: `docs/DEMO_VIDEO_GUIDE.md`
 - Full AI video packet: `docs/AI_VIDEO_PRODUCTION_PACKET.md`
+- Playwright silent video + Google Vids audio workflow: `docs/GOOGLE_VIDS_AUDIO_STEPS.md`
 
 ## Cloud Run
 
