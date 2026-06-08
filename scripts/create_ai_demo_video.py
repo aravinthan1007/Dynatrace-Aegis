@@ -16,6 +16,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "runtime_artifacts" / "video"
 OUT_FILE = OUT_DIR / "aegis-demo-silent.webm"
+RECORDING_MS = 172_000
 
 
 HTML = dedent(
@@ -176,7 +177,7 @@ def main() -> None:
         )
         page = context.new_page()
         page.set_content(HTML, wait_until="load")
-        page.wait_for_timeout(160_000)
+        page.wait_for_timeout(RECORDING_MS)
         video = page.video
         context.close()
         browser.close()
