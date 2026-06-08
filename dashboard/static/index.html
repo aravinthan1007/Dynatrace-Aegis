@@ -147,6 +147,7 @@
       <button id="runButton">▶ Run Game Day</button>
       <button class="secondary" id="failButton">⚠ Run Fail Scenario</button>
       <button class="secondary" id="approveButton" disabled>✋ Approve Injection</button>
+      <a class="linkchip" href="/onboard" style="margin-left:auto;">☁ Onboard Dynatrace on GKE →</a>
       <span class="hint" id="statusText">Idle — ready to run.</span>
     </div>
 
@@ -187,6 +188,16 @@
       <section class="panel" style="grid-column: 1 / -1;">
         <div class="panel-header"><h2>Agent reasoning feed</h2><span class="hint">live decisions &amp; actions</span></div>
         <div class="panel-body"><div class="feed" id="feed"></div></div>
+      </section>
+    </div>
+
+    <div class="grid" style="padding-top:0;">
+      <section class="panel" style="grid-column: 1 / -1;">
+        <div class="panel-header"><h2>Dynatrace × GCP onboarding</h2><span class="hint">single-click • secure (Secret Manager) • self-verifying</span></div>
+        <div class="panel-body">
+          <button class="secondary" id="onboardBtn">⚙ Onboard Dynatrace on GCP</button>
+          <div id="onboardOut" class="hint" style="margin-top:12px; line-height:1.5;"></div>
+        </div>
       </section>
     </div>
 
@@ -360,6 +371,24 @@
         startGameDay("/run-agent", "Starting game day via Google ADK…"));
       $("failButton").addEventListener("click", () =>
         startGameDay("/run-fail", "Starting FAIL scenario (fix won't hold)…"));
+
+      $("onboardBtn").addEventListener("click", async () => {
+        const out = $("onboardOut");
+        out.textContent = "Running onboarding plan + live Dynatrace MCP verification…";
+        try {
+          const d = await (await fetch("/onboard")).json();
+          let html = "<b>Onboarding plan (one call):</b><ol style='margin:6px 0 0 18px'>";
+          (d.plan || []).forEach((s) => { html += `<li><b>${s.step}</b> — ${s.detail}</li>`; });
+          html += "</ol>";
+          const v = d.verify || {};
+          const vtxt = v.ok
+            ? `spans_last_15m=${v.spans_last_15m} · has_data=${v.has_data}`
+            : (v.error || v.detail || (v.configured === false ? "Dynatrace not configured on this service" : "n/a"));
+          html += `<div style='margin-top:10px'><b>Live MCP verify:</b> ${vtxt}</div>`;
+          html += `<div style='margin-top:10px'><b>Provision via agent CLI:</b><br><code style='font-size:.78rem'>${(d.cli || "").replace(/</g,"&lt;")}</code></div>`;
+          out.innerHTML = html;
+        } catch (e) { out.textContent = "onboard failed: " + e; }
+      });
       $("approveButton").addEventListener("click", async () => {
         await fetch("/approve", { method: "POST" });
         $("approveButton").disabled = true; $("approveButton").classList.remove("pulse");

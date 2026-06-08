@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi import Request
 from fastapi.responses import FileResponse
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -16,6 +18,7 @@ from aegis_agent.agent import run_with_adk
 from aegis_agent.config import get_config
 from aegis_agent.dynatrace import fetch_burn_rate
 from aegis_agent.events import event_bus
+from aegis_agent.onboarding.gke import onboard_gke_autopilot
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -31,6 +34,34 @@ async def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/onboard")
+async def onboard_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "onboard.html")
+
+
+@app.post("/onboard-gke")
+async def onboard_gke(request: Request) -> dict:
+    """Kick off the self-healing GKE Autopilot onboarding (dry-run unless execute=true)."""
+    body = await request.json()
+    kwargs = dict(
+        project_id=(body.get("project_id") or "").strip(),
+        dynatrace_url=(body.get("dynatrace_url") or config.dt_environment).strip(),
+        dynatrace_access_key=(body.get("dynatrace_access_key") or config.dt_api_token).strip(),
+        cluster_name=(body.get("cluster_name") or "dynatrace-gcp-monitor").strip(),
+        region=(body.get("region") or "us-central1").strip(),
+        topic_name=(body.get("topic_name") or "dynatrace-gcp-logs").strip(),
+        subscription_name=(body.get("subscription_name") or "dynatrace-gcp-logs-sub").strip(),
+        deployment_type=(body.get("deployment_type") or "all").strip(),
+        log_filter=(body.get("log_filter") or "").strip(),
+        execute=bool(body.get("execute", False)),
+    )
+    if not kwargs["project_id"]:
+        return {"status": "error", "detail": "project_id is required"}
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(None, lambda: onboard_gke_autopilot(**kwargs))
+    return {"status": "started", "execute": kwargs["execute"], "mode": "live" if kwargs["execute"] else "dry-run"}
+
+
 @app.get("/health")
 async def health() -> dict:
     return {
@@ -40,6 +71,47 @@ async def health() -> dict:
         "github_configured": config.has_github,
         "slack_configured": config.has_slack,
     }
+
+
+@app.get("/onboard")
+async def onboard_plan() -> dict:
+    """Onboarding plan + a live Dynatrace MCP verification for the demo service.
+
+    Provisioning (enable APIs, Secret Manager, Cloud Run OTLP, infra-metrics bridge)
+    runs via the onboarding agent where gcloud is available; the deployed dashboard
+    container has no gcloud, so here we surface the plan + run the live verify.
+    """
+    project = os.getenv("GOOGLE_CLOUD_PROJECT", "")
+    service = os.getenv("AEGIS_ONBOARD_SERVICE", "aegis-demo-app")
+    plan = [
+        {"step": "enable_gcp_apis", "detail": "run, cloudbuild, monitoring, secretmanager, aiplatform"},
+        {"step": "store_token_secret", "detail": "Dynatrace OTLP token -> GCP Secret Manager (+ grant runtime SA)"},
+        {"step": "configure_cloud_run_otlp", "detail": f"{service}: OTLP endpoint + token-from-secret + delta metrics"},
+        {"step": "bridge_gcp_metrics", "detail": "Cloud Run platform metrics -> Dynatrace Metrics v2 (no Helm)"},
+        {"step": "verify_dynatrace_ingest", "detail": "DQL via Dynatrace MCP"},
+    ]
+    cli = (
+        "python -m aegis_agent.onboarding.agent "
+        f"--project {project or '<PROJECT>'} --region {config.demo_app_url and 'us-central1'} "
+        f"--services {service} --dt-environment {config.dt_environment or '<TENANT_URL>'} "
+        "--dt-otlp-token <INGEST_TOKEN> --runtime-sa <SA> "
+        "--oauth-client-id <DT0S02_ID> --oauth-client-secret <SECRET>"
+    )
+    verify: dict = {"configured": config.has_dynatrace}
+    if config.has_dynatrace:
+        try:
+            from aegis_agent.onboarding.agent import verify_dynatrace_ingest
+
+            verify = await asyncio.to_thread(
+                verify_dynatrace_ingest,
+                config.dt_environment,
+                config.dt_oauth_client_id,
+                config.dt_oauth_client_secret,
+                service,
+            )
+        except Exception as exc:
+            verify = {"ok": False, "error": str(exc)[:300]}
+    return {"project": project, "service": service, "plan": plan, "cli": cli, "verify": verify}
 
 
 @app.get("/dt-check")
