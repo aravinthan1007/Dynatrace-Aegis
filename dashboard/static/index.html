@@ -37,6 +37,7 @@
       .brand h1 { margin: 0; font-size: 1.15rem; letter-spacing: 0.04em; }
       .brand p { margin: 2px 0 0; color: var(--muted); font-size: 0.82rem; }
       .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+      .menu { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
       .badge {
         font-size: 0.72rem; padding: 6px 10px; border-radius: 999px;
         background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color: var(--muted);
@@ -62,6 +63,7 @@
         background: rgba(140,184,255,0.14); border: 1px solid var(--panel-border); color: var(--accent2); font-weight: 600; }
       .linkchip.muted { background: rgba(255,255,255,0.04); color: var(--muted); font-weight: 500; }
       a.linkchip[href]:hover { background: rgba(140,184,255,0.28); }
+      .menu .linkchip { padding: 7px 12px; font-size: 0.78rem; }
 
       /* Pipeline stepper */
       .pipeline { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; padding: 12px 24px 4px; }
@@ -130,6 +132,12 @@
         <p>Finds the riskiest dependency, runs a safe chaos experiment, and proves the fix — with a deterministic safety brake.</p>
       </div>
       <div class="badges">
+        <nav class="menu" aria-label="Primary">
+          <a class="linkchip" href="/">Game day</a>
+          <a class="linkchip" href="/onboard">Onboarding</a>
+          <a class="linkchip" href="/dt-check">Dynatrace check</a>
+          <a class="linkchip" href="/github-status">GitHub status</a>
+        </nav>
         <span class="badge"><b>Google ADK</b> + Gemini</span>
         <span class="badge"><span class="dot" id="dtDot"></span><b>Dynatrace</b> <span id="dtMode">checking…</span></span>
         <span class="badge"><span class="dot" id="connDot"></span><span id="connText">connecting…</span></span>
@@ -147,7 +155,6 @@
       <button id="runButton">▶ Run Game Day</button>
       <button class="secondary" id="failButton">⚠ Run Fail Scenario</button>
       <button class="secondary" id="approveButton" disabled>✋ Approve Injection</button>
-      <a class="linkchip" href="/onboard" style="margin-left:auto;">☁ Onboard Dynatrace on GKE →</a>
       <span class="hint" id="statusText">Idle — ready to run.</span>
     </div>
 
@@ -188,16 +195,6 @@
       <section class="panel" style="grid-column: 1 / -1;">
         <div class="panel-header"><h2>Agent reasoning feed</h2><span class="hint">live decisions &amp; actions</span></div>
         <div class="panel-body"><div class="feed" id="feed"></div></div>
-      </section>
-    </div>
-
-    <div class="grid" style="padding-top:0;">
-      <section class="panel" style="grid-column: 1 / -1;">
-        <div class="panel-header"><h2>Dynatrace × GCP onboarding</h2><span class="hint">single-click • secure (Secret Manager) • self-verifying</span></div>
-        <div class="panel-body">
-          <button class="secondary" id="onboardBtn">⚙ Onboard Dynatrace on GCP</button>
-          <div id="onboardOut" class="hint" style="margin-top:12px; line-height:1.5;"></div>
-        </div>
       </section>
     </div>
 
@@ -372,19 +369,6 @@
       $("failButton").addEventListener("click", () =>
         startGameDay("/run-fail", "Starting FAIL scenario (fix won't hold)…"));
 
-      $("onboardBtn").addEventListener("click", () => { window.location.href = "/onboard"; });
-      // Show a quick live verification inline (the dedicated page is at /onboard).
-      (async () => {
-        try {
-          const d = await (await fetch("/onboard-status")).json();
-          const v = d.verify || {};
-          const vtxt = v.ok
-            ? `spans_last_15m=${v.spans_last_15m} · has_data=${v.has_data}`
-            : (v.configured === false ? "Dynatrace not configured" : (v.error || v.detail || "n/a"));
-          $("onboardOut").innerHTML =
-            `Opens the guided onboarding page. Live Dynatrace MCP verify: <b>${vtxt}</b>.`;
-        } catch (e) { /* leave default */ }
-      })();
       $("approveButton").addEventListener("click", async () => {
         await fetch("/approve", { method: "POST" });
         $("approveButton").disabled = true; $("approveButton").classList.remove("pulse");

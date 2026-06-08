@@ -35,6 +35,7 @@ except ImportError:  # pragma: no cover
 
 from ..config import get_config
 from ..dynatrace import query_dql
+from ..dynatrace_skills import build_post_onboarding_queries, get_dynatrace_skill_context
 
 config = get_config()
 
@@ -316,6 +317,11 @@ INSTRUCTION = dedent(
     on each service, and verifies ingest via the Dynatrace MCP. Report each step and,
     if verification shows no data, clearly explain the tenant must enable OTel/Grail
     retention. Never print secrets.
+
+    For post-onboarding validation, eval/test-case generation, or troubleshooting
+    questions, use the curated Dynatrace skill helpers. They provide DQL and
+    observability guidance only; live Google Cloud mutations must stay in the
+    deterministic onboarding tools.
     """
 ).strip()
 
@@ -331,6 +337,8 @@ root_agent = BaseAgent(
         FunctionTool(bridge_gcp_metrics),
         FunctionTool(verify_dynatrace_ingest),
         FunctionTool(onboard_dynatrace_gcp),
+        FunctionTool(get_dynatrace_skill_context),
+        FunctionTool(build_post_onboarding_queries),
     ],
 )
 

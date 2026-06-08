@@ -3,192 +3,527 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Aegis — Dynatrace-on-GKE Onboarding</title>
+    <title>Aegis Onboarding</title>
     <style>
       :root {
-        --bg: #07131e; --panel: rgba(10, 24, 37, 0.84); --panel-border: rgba(157, 197, 255, 0.16);
-        --text: #e9f2ff; --muted: #93a9bf; --accent: #7be0b7; --accent2: #8cb8ff;
-        --ok: #7be0b7; --bad: #ff6f61; --warn: #f7c948; --fix: #c792ea;
+        --bg: #0d1117;
+        --surface: #151b23;
+        --surface-2: #1b2430;
+        --line: #303b49;
+        --text: #eef3f8;
+        --muted: #9aa8b6;
+        --green: #58d68d;
+        --blue: #79b8ff;
+        --amber: #f2c94c;
+        --red: #ff7b72;
+        --ink: #0b1118;
       }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; color: var(--text);
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        background: var(--bg);
         font-family: "Segoe UI", system-ui, sans-serif;
-        background: radial-gradient(circle at top left, rgba(45,115,255,0.22), transparent 32%),
-          radial-gradient(circle at bottom right, rgba(123,224,183,0.12), transparent 32%),
-          linear-gradient(160deg, #041018 0%, #07131e 45%, #0a1b28 100%); }
-      a { color: var(--accent2); }
-      .topbar { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:18px 24px; border-bottom:1px solid var(--panel-border); }
-      .brand h1 { margin:0; font-size:1.15rem; letter-spacing:0.04em; }
-      .brand p { margin:2px 0 0; color:var(--muted); font-size:0.82rem; }
-      .badge { font-size:0.72rem; padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.05);
-        border:1px solid var(--panel-border); color:var(--muted); }
-      .badge b { color: var(--text); }
-      .grid { display:grid; grid-template-columns: 0.9fr 1.1fr; gap:18px; padding:18px 24px 28px; }
-      @media (max-width: 980px){ .grid { grid-template-columns: 1fr; } }
-      .panel { background:var(--panel); border:1px solid var(--panel-border); border-radius:18px; overflow:hidden; }
-      .panel-header { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.08); }
-      .panel-header h2 { margin:0; font-size:0.92rem; letter-spacing:0.06em; text-transform:uppercase; }
-      .panel-body { padding:16px 18px; }
-      label { display:block; font-size:0.78rem; color:var(--muted); margin:10px 0 4px; }
-      input, select { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--panel-border);
-        background:rgba(255,255,255,0.04); color:var(--text); font-size:0.9rem; }
-      .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-      .check { display:flex; align-items:center; gap:8px; margin-top:14px; }
-      .check input { width:auto; }
-      .modepill { font-size:0.74rem; padding:4px 10px; border-radius:999px; }
-      .modepill.dry { background:rgba(140,184,255,0.18); color:var(--accent2); }
-      .modepill.live { background:rgba(255,111,97,0.2); color:var(--bad); }
-      button { border:0; border-radius:999px; padding:12px 20px; color:#041018; font-weight:700; cursor:pointer; margin-top:16px;
-        background:linear-gradient(135deg, var(--accent), #a7f3d0); width:100%; }
-      button:disabled { opacity:0.4; cursor:not-allowed; }
-      .steps { display:flex; flex-direction:column; gap:8px; }
-      .step { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px;
-        background:rgba(255,255,255,0.035); border:1px solid var(--panel-border); font-size:0.86rem; }
-      .step .ic { width:18px; height:18px; border-radius:50%; border:2px solid var(--muted); flex:none; }
-      .step.active { border-color:var(--accent2); background:rgba(140,184,255,0.10); }
-      .step.active .ic { border-color:var(--accent2); border-top-color:transparent; animation:spin 0.8s linear infinite; }
-      .step.done .ic { border-color:var(--ok); background:var(--ok); }
-      .step.failed .ic { border-color:var(--bad); background:var(--bad); }
-      @keyframes spin { to { transform: rotate(360deg);} }
-      .feed { height:420px; overflow:auto; font-family:"SFMono-Regular",Consolas,monospace; font-size:0.8rem; line-height:1.5; }
-      .line { padding:2px 0; white-space:pre-wrap; word-break:break-word; }
-      .line.fix { color:var(--fix); font-weight:600; }
-      .line.warn { color:var(--warn); }
-      .line.error { color:var(--bad); }
-      .line.info { color:var(--text); }
-      #summary { display:none; margin-top:12px; padding:12px; border-radius:12px; background:rgba(123,224,183,0.08); border:1px solid var(--panel-border); font-size:0.84rem; }
-      #summary.warn { background:rgba(247,201,72,0.10); }
-      .hint { color:var(--muted); font-size:0.82rem; }
+      }
+      a { color: var(--blue); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .shell { max-width: 1420px; margin: 0 auto; padding: 18px 22px 28px; }
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 14px;
+      }
+      .brand h1 { margin: 0; font-size: 1.25rem; letter-spacing: 0; }
+      .brand p { margin: 3px 0 0; color: var(--muted); font-size: 0.86rem; }
+      .top-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+      .chip, .tab, .ghost {
+        min-height: 34px;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 7px 10px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 0.8rem;
+        white-space: nowrap;
+      }
+      .chip strong { color: var(--text); font-weight: 650; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+      .dot.ok { background: var(--green); }
+      .dot.warn { background: var(--amber); }
+      .dot.bad { background: var(--red); }
+      .tabs { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+      .tab { cursor: pointer; color: var(--text); }
+      .tab.active { border-color: var(--blue); background: rgba(121, 184, 255, 0.12); }
+      .grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 14px; }
+      .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      @media (max-width: 980px) {
+        .grid, .three, .two { grid-template-columns: 1fr; }
+        .top-actions { margin-left: 0; }
+        .topbar { align-items: flex-start; flex-direction: column; }
+      }
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .panel-header {
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .panel-header h2 { margin: 0; font-size: 0.92rem; letter-spacing: 0; }
+      .panel-body { padding: 14px; }
+      .metric {
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        min-height: 86px;
+      }
+      .metric small { color: var(--muted); font-size: 0.75rem; display: block; }
+      .metric strong { display: block; margin-top: 8px; font-size: 1rem; overflow-wrap: anywhere; }
+      .metric span { display: block; margin-top: 5px; color: var(--muted); font-size: 0.78rem; }
+      .status-list { display: grid; gap: 8px; }
+      .status-row {
+        display: grid;
+        grid-template-columns: 18px minmax(120px, 0.55fr) 1fr;
+        gap: 9px;
+        align-items: start;
+        padding: 9px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-2);
+        font-size: 0.86rem;
+      }
+      .status-row b { font-weight: 650; }
+      .status-row span:last-child { color: var(--muted); overflow-wrap: anywhere; }
+      label { display: block; color: var(--muted); font-size: 0.78rem; margin: 10px 0 5px; }
+      input, select {
+        width: 100%;
+        min-height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0f151d;
+        color: var(--text);
+        padding: 8px 10px;
+        font-size: 0.9rem;
+      }
+      input:focus, select:focus, button:focus, .tab:focus {
+        outline: 2px solid var(--blue);
+        outline-offset: 2px;
+      }
+      .check { display: flex; gap: 9px; align-items: flex-start; margin-top: 12px; }
+      .check input { width: auto; min-height: auto; margin-top: 3px; }
+      .check label { margin: 0; color: var(--text); }
+      button {
+        border: 0;
+        border-radius: 8px;
+        min-height: 40px;
+        padding: 9px 13px;
+        font-weight: 700;
+        cursor: pointer;
+        color: var(--ink);
+        background: var(--green);
+      }
+      button.secondary { background: var(--blue); }
+      button.danger { background: var(--red); color: #1b0808; }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      .button-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+      .hint { color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
+      .mono {
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.78rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .codebox {
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0a0f15;
+        padding: 10px;
+        max-height: 210px;
+        overflow: auto;
+      }
+      .feed { height: 360px; overflow: auto; }
+      .line { padding: 3px 0; }
+      .line.fix { color: #d2a8ff; }
+      .line.warn { color: var(--amber); }
+      .line.error { color: var(--red); }
+      .steps { display: grid; gap: 7px; }
+      .step {
+        display: grid;
+        grid-template-columns: 18px 1fr;
+        gap: 9px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-2);
+        padding: 8px 10px;
+        font-size: 0.84rem;
+      }
+      .step.active { border-color: var(--blue); }
+      .step.done { border-color: rgba(88, 214, 141, 0.65); }
+      .step.failed { border-color: rgba(255, 123, 114, 0.75); }
+      .hidden { display: none; }
+      .query-list { display: grid; gap: 8px; }
+      details {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-2);
+        padding: 9px 10px;
+      }
+      summary { cursor: pointer; font-weight: 650; }
+      summary span { color: var(--muted); font-weight: 500; margin-left: 6px; }
     </style>
   </head>
   <body>
-    <div class="topbar">
-      <div class="brand">
-        <h1>Dynatrace-on-GKE Onboarding</h1>
-        <p>Self-healing single-click GCP metric + log integration on a new GKE Autopilot cluster.</p>
-      </div>
-      <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
-        <span class="badge"><b>Google ADK</b> + Gemini</span>
-        <span class="badge"><b>Dynatrace</b> MCP verify</span>
-        <a class="badge" href="/">← Back to Aegis</a>
-      </div>
-    </div>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <h1>Aegis onboarding</h1>
+          <p>Current Google Cloud project, Dynatrace verification, GitHub readiness, and optional GKE onboarding.</p>
+        </div>
+        <div class="top-actions">
+          <a class="ghost" href="/">Back to game day</a>
+          <span class="chip"><span class="dot" id="dtDot"></span><strong>Dynatrace</strong><span id="dtText">checking</span></span>
+          <span class="chip"><span class="dot" id="ghDot"></span><strong>GitHub</strong><span id="ghText">checking</span></span>
+        </div>
+      </header>
 
-    <div class="grid">
-      <section class="panel">
-        <div class="panel-header"><h2>Onboarding inputs</h2><span class="modepill dry" id="modePill">DRY-RUN</span></div>
-        <div class="panel-body">
-          <label>GCP project ID * <span class="hint" id="projHint">(loading projects…)</span></label>
-          <input id="project_id" list="projectList" placeholder="loading projects…" />
-          <datalist id="projectList"></datalist>
-          <label>Dynatrace URL *</label>
-          <input id="dynatrace_url" placeholder="https://abc12345.apps.dynatrace.com" />
-          <label>Dynatrace access token (leave blank to use the configured Secret Manager token)</label>
-          <input id="dynatrace_access_key" type="password" placeholder="blank = use configured token" />
-          <div class="row">
-            <div><label>New cluster name</label><input id="cluster_name" value="dynatrace-gcp-monitor" /></div>
-            <div><label>Region</label><input id="region" value="us-central1" /></div>
+      <nav class="tabs" aria-label="Onboarding modes">
+        <button class="tab active" data-tab="current" type="button">Current project</button>
+        <button class="tab" data-tab="gke" type="button">GKE Autopilot</button>
+        <button class="tab" data-tab="checks" type="button">DQL checks</button>
+      </nav>
+
+      <section id="tab-current">
+        <div class="three">
+          <div class="metric"><small>GCP project</small><strong id="projectVal">loading</strong><span id="regionVal"></span></div>
+          <div class="metric"><small>Cloud Run service</small><strong id="serviceVal">loading</strong><span id="demoUrl"></span></div>
+          <div class="metric"><small>GitHub repo</small><strong id="repoVal">loading</strong><span id="baseVal"></span></div>
+        </div>
+        <section class="panel" style="margin-top:14px;">
+          <div class="panel-header"><h2>Available Google Cloud projects</h2><span class="hint">configured for onboarding</span></div>
+          <div class="panel-body">
+            <div class="status-list" id="projectRows"></div>
           </div>
-          <div class="row">
-            <div><label>Pub/Sub topic</label><input id="topic_name" value="dynatrace-gcp-logs" /></div>
-            <div><label>Subscription</label><input id="subscription_name" value="dynatrace-gcp-logs-sub" /></div>
-          </div>
-          <div class="row">
-            <div><label>Deployment type</label>
-              <select id="deployment_type"><option value="all">all</option><option value="metrics">metrics</option><option value="logs">logs</option></select>
+        </section>
+
+        <div class="grid" style="margin-top:14px;">
+          <section class="panel">
+            <div class="panel-header"><h2>Cloud Run onboarding status</h2><span class="hint">current demo path</span></div>
+            <div class="panel-body">
+              <div class="status-list" id="planList"></div>
+              <div class="codebox mono" id="cliBox">Loading command...</div>
+              <div class="button-row">
+                <button class="secondary" id="refreshStatus" type="button">Refresh status</button>
+                <a class="ghost" href="/dt-check">Open Dynatrace check</a>
+              </div>
+              <p class="hint" id="verifyText"></p>
             </div>
-            <div><label>Log filter (optional)</label><input id="log_filter" placeholder="resource.type=..." /></div>
-          </div>
-          <div class="check">
-            <input type="checkbox" id="execute" />
-            <label for="execute" style="margin:0;">Execute live (creates a billable GKE Autopilot cluster + Pub/Sub). Leave off for a safe dry-run.</label>
-          </div>
-          <button id="goButton">▶ Onboard Dynatrace on GKE</button>
-          <p class="hint" id="statusText">Dry-run shows the exact gcloud/helm commands without touching your project.</p>
-          <div id="summary"></div>
+          </section>
+
+          <aside class="panel">
+            <div class="panel-header"><h2>Execution model</h2><span class="hint">Gemini ADK</span></div>
+            <div class="panel-body">
+              <div class="status-list">
+                <div class="status-row"><span class="dot ok"></span><b>ADK role</b><span>Gemini selects and calls tools.</span></div>
+                <div class="status-row"><span class="dot ok"></span><b>Mutation role</b><span>Python tools perform gcloud and GitHub operations.</span></div>
+                <div class="status-row"><span class="dot warn"></span><b>Safety</b><span>GKE onboarding is dry-run until live mode is explicitly selected.</span></div>
+              </div>
+              <div class="codebox mono" id="githubBox">Checking GitHub...</div>
+            </div>
+          </aside>
         </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-header"><h2>Pipeline &amp; self-healing log</h2><span class="hint">live</span></div>
-        <div class="panel-body">
-          <div class="steps" id="steps"></div>
-          <h2 style="font-size:0.74rem;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;margin:16px 0 8px;">Command &amp; self-heal stream</h2>
-          <div class="feed" id="feed"><div class="line hint">Fill in the form and run to stream progress…</div></div>
+      <section id="tab-gke" class="hidden">
+        <div class="grid">
+          <section class="panel">
+            <div class="panel-header"><h2>GKE onboarding inputs</h2><span class="chip" id="modePill">DRY-RUN</span></div>
+            <div class="panel-body">
+              <label>GCP project ID <span class="hint" id="projHint">(loading)</span></label>
+              <input id="project_id" list="projectList" />
+              <datalist id="projectList"></datalist>
+
+              <label>Dynatrace URL</label>
+              <input id="dynatrace_url" placeholder="https://tenant.apps.dynatrace.com" />
+
+              <label>Dynatrace access token</label>
+              <input id="dynatrace_access_key" type="password" placeholder="Blank uses configured token when available" />
+
+              <div class="two">
+                <div><label>New cluster name</label><input id="cluster_name" value="dynatrace-gcp-monitor" /></div>
+                <div><label>Region</label><input id="region" value="us-central1" /></div>
+              </div>
+
+              <div class="two">
+                <div><label>Pub/Sub topic</label><input id="topic_name" value="dynatrace-gcp-logs" /></div>
+                <div><label>Subscription</label><input id="subscription_name" value="dynatrace-gcp-logs-sub" /></div>
+              </div>
+
+              <div class="two">
+                <div>
+                  <label>Deployment type</label>
+                  <select id="deployment_type">
+                    <option value="all">all</option>
+                    <option value="metrics">metrics</option>
+                    <option value="logs">logs</option>
+                  </select>
+                </div>
+                <div><label>Log filter</label><input id="log_filter" placeholder="Optional GCP logging filter" /></div>
+              </div>
+
+              <div class="check">
+                <input type="checkbox" id="execute" />
+                <label for="execute">Execute live. This creates billable GKE, Pub/Sub, logging, and IAM resources.</label>
+              </div>
+
+              <div class="button-row">
+                <button id="goButton" type="button">Run GKE onboarding</button>
+              </div>
+              <p class="hint" id="statusText">Dry-run plans commands without touching the project.</p>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header"><h2>Pipeline log</h2><span class="hint">server-sent events</span></div>
+            <div class="panel-body">
+              <div class="steps" id="steps"></div>
+              <div class="codebox feed mono" id="feed"><div class="line hint">Run onboarding to stream progress.</div></div>
+              <div class="codebox mono hidden" id="summary"></div>
+            </div>
+          </section>
         </div>
       </section>
-    </div>
+
+      <section id="tab-checks" class="hidden">
+        <section class="panel">
+          <div class="panel-header"><h2>Post-onboarding DQL checks</h2><span class="hint">from curated Dynatrace skills</span></div>
+          <div class="panel-body">
+            <p class="hint">Run these through Dynatrace MCP after onboarding. Empty results should be treated as has_data=false, not as success.</p>
+            <div class="query-list" id="queryList"></div>
+          </div>
+        </section>
+      </section>
+    </main>
 
     <script>
       const $ = (id) => document.getElementById(id);
-      const STEPS = [
-        ["preflight","Preflight — auth, APIs, CLI tools"],
-        ["iam","Custom IAM role + binding"],
-        ["pubsub","Pub/Sub topic + subscription"],
-        ["logsink","Log export sink"],
-        ["helm_pkg","Download Helm package"],
-        ["values","Write values.yaml"],
-        ["deploy","Create Autopilot cluster + deploy"],
-        ["verify_pods","Verify forwarder pods"],
-        ["verify_dt","Verify GCP data in Dynatrace (MCP)"],
-      ];
-      const stepsEl = $("steps");
-      STEPS.forEach(([k,l]) => {
-        const el = document.createElement("div"); el.className="step"; el.id="ostep-"+k;
-        el.innerHTML = `<span class="ic"></span><span>${l}</span>`; stepsEl.appendChild(el);
-      });
-      const setStep = (k,state) => { const el=$("ostep-"+k); if(!el) return;
-        el.classList.remove("active","done","failed"); if(state) el.classList.add(state); };
+      const tabs = document.querySelectorAll(".tab");
+      tabs.forEach((tab) => tab.addEventListener("click", () => {
+        tabs.forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+        ["current", "gke", "checks"].forEach((name) => $("tab-" + name).classList.toggle("hidden", name !== tab.dataset.tab));
+      }));
 
-      // Auto-populate available GCP projects + details (Gemini/GCP does the rest).
-      (async () => {
+      const STEPS = [
+        ["preflight", "Preflight"],
+        ["iam", "Custom IAM role"],
+        ["pubsub", "Pub/Sub"],
+        ["logsink", "Log sink"],
+        ["helm_pkg", "Helm package"],
+        ["values", "Values"],
+        ["deploy", "Deploy"],
+        ["verify_pods", "Pods"],
+        ["verify_dt", "Dynatrace verify"],
+      ];
+      STEPS.forEach(([key, label]) => {
+        const row = document.createElement("div");
+        row.className = "step";
+        row.id = "ostep-" + key;
+        row.innerHTML = `<span class="dot"></span><span>${label}</span>`;
+        $("steps").appendChild(row);
+      });
+      function setStep(key, state) {
+        const row = $("ostep-" + key);
+        if (!row) return;
+        row.classList.remove("active", "done", "failed");
+        row.querySelector(".dot").className = "dot";
+        if (state) row.classList.add(state);
+        if (state === "done") row.querySelector(".dot").classList.add("ok");
+        if (state === "active") row.querySelector(".dot").classList.add("warn");
+        if (state === "failed") row.querySelector(".dot").classList.add("bad");
+      }
+      function setDot(id, ok, warn) {
+        const dot = $(id);
+        dot.className = "dot " + (ok ? "ok" : warn ? "warn" : "bad");
+      }
+      function text(value, fallback = "n/a") {
+        return value === undefined || value === null || value === "" ? fallback : String(value);
+      }
+
+      async function loadEnvironment() {
+        const env = await (await fetch("/environment-status")).json();
+        $("projectVal").textContent = text(env.project);
+        $("regionVal").textContent = "region " + text(env.region);
+        $("serviceVal").textContent = text(env.service);
+        $("demoUrl").textContent = text(env.demo_app_url);
+        $("repoVal").textContent = text(env.github && env.github.repo);
+        $("baseVal").textContent = "base " + text(env.github && env.github.base_branch);
+        $("dynatrace_url").value = env.dynatrace_environment || "";
+        $("project_id").value = env.project || "";
+        $("region").value = env.region || "us-central1";
+        setDot("dtDot", !!env.dynatrace_configured, false);
+        $("dtText").textContent = env.dynatrace_configured ? "configured" : "missing";
+        renderProjects(env.available_projects || [], env.project);
+        renderGithub(env.github || {});
+      }
+
+      function renderProjects(projects, current) {
+        const list = $("projectRows");
+        list.innerHTML = "";
+        if (!projects.length) {
+          list.innerHTML = '<div class="status-row"><span class="dot warn"></span><b>No list</b><span>Only the active project could be detected.</span></div>';
+          return;
+        }
+        projects.forEach((project) => {
+          const row = document.createElement("div");
+          row.className = "status-row";
+          const isCurrent = project.project_id === current;
+          const detail = [
+            project.name || "Unnamed project",
+            project.project_number ? "number " + project.project_number : "",
+            project.source ? "source " + project.source : "",
+          ].filter(Boolean).join(" / ");
+          row.innerHTML = `<span class="dot ${isCurrent ? "ok" : ""}"></span><b>${project.project_id}</b><span>${detail}${isCurrent ? " / active Cloud Run project" : ""}</span>`;
+          list.appendChild(row);
+        });
+      }
+
+      async function loadProjects() {
         try {
           const d = await (await fetch("/gcp-projects")).json();
-          const dl = $("projectList"); dl.innerHTML = "";
-          (d.projects || []).forEach((p) => { const o = document.createElement("option"); o.value = p; dl.appendChild(o); });
-          if (d.current && !$("project_id").value) $("project_id").value = d.current;
-          if (d.dt_environment && !$("dynatrace_url").value) $("dynatrace_url").value = d.dt_environment;
+          const list = $("projectList");
+          list.innerHTML = "";
+          const details = (d.project_details && d.project_details.length)
+            ? d.project_details
+            : (d.projects || []).map((project_id) => ({ project_id }));
+          details.forEach((project) => {
+            const option = document.createElement("option");
+            option.value = project.project_id;
+            option.label = [project.name, project.project_number].filter(Boolean).join(" / ");
+            list.appendChild(option);
+          });
+          if (d.current) $("project_id").value = d.current;
+          if (d.dt_environment) $("dynatrace_url").value = d.dt_environment;
           if (d.region) $("region").value = d.region;
-          $("project_id").placeholder = (d.projects && d.projects.length) ? "select or type a project" : "my-gcp-project";
-          $("projHint").textContent = d.error
-            ? "(autopopulate limited: " + d.error + ")"
-            : "(" + ((d.projects || []).length) + " projects found)";
-        } catch (e) { $("projHint").textContent = "(could not list projects)"; }
-      })();
+          $("projHint").textContent = d.error ? "limited: " + d.error : `${(d.projects || []).length} found`;
+        } catch (err) {
+          $("projHint").textContent = "could not list";
+        }
+      }
+
+      function renderGithub(github) {
+        const ok = !!github.ok;
+        const configured = !!github.configured;
+        setDot("ghDot", ok, configured);
+        $("ghText").textContent = ok ? "ready" : configured ? "needs attention" : "missing";
+        const lines = [
+          `repo: ${text(github.repo)}`,
+          `base: ${text(github.base_branch)}`,
+          `target: ${text(github.target_path)}`,
+          `repo read: ${github.repo_read ? "ok" : "no"}`,
+          `base ref read: ${github.base_ref_read ? "ok" : "no"}`,
+          `target file read: ${github.target_file_read ? "ok" : "no"}`,
+        ];
+        if (github.permissions && Object.keys(github.permissions).length) {
+          lines.push("permissions: " + JSON.stringify(github.permissions));
+        }
+        if (github.detail) lines.push("detail: " + github.detail);
+        $("githubBox").textContent = lines.join("\n");
+      }
+
+      async function loadOnboardingStatus() {
+        const d = await (await fetch("/onboard-status")).json();
+        const list = $("planList");
+        list.innerHTML = "";
+        (d.plan || []).forEach((step) => {
+          const row = document.createElement("div");
+          row.className = "status-row";
+          row.innerHTML = `<span class="dot ok"></span><b>${step.step}</b><span>${step.detail}</span>`;
+          list.appendChild(row);
+        });
+        $("cliBox").textContent = d.cli || "";
+        const v = d.verify || {};
+        $("verifyText").textContent = v.ok
+          ? `Dynatrace verify: spans_last_15m=${text(v.spans_last_15m, 0)}, has_data=${text(v.has_data)}`
+          : `Dynatrace verify: ${text(v.error || v.detail || v.configured, "not available")}`;
+      }
+
+      async function loadChecks() {
+        const d = await (await fetch("/post-onboarding-checks")).json();
+        const list = $("queryList");
+        list.innerHTML = "";
+        (d.queries || []).forEach((query) => {
+          const item = document.createElement("details");
+          item.innerHTML = `<summary>${query.name}<span>${query.skill}</span></summary><div class="codebox mono">${query.dql}</div>`;
+          list.appendChild(item);
+        });
+      }
+
+      $("refreshStatus").addEventListener("click", async () => {
+        await loadEnvironment();
+        await loadOnboardingStatus();
+        await loadChecks();
+      });
+
+      $("execute").addEventListener("change", (event) => {
+        const live = event.target.checked;
+        $("modePill").textContent = live ? "LIVE" : "DRY-RUN";
+        $("modePill").style.borderColor = live ? "var(--red)" : "var(--line)";
+        $("statusText").textContent = live
+          ? "Live mode will create real resources in the selected project."
+          : "Dry-run plans commands without touching the project.";
+      });
 
       const feed = $("feed");
       let started = false;
-      function logLine(text, level) {
-        if (!started) { feed.innerHTML=""; started=true; }
-        const d = document.createElement("div"); d.className = "line "+(level||"info"); d.textContent = text;
-        feed.appendChild(d); feed.scrollTop = feed.scrollHeight;
+      function logLine(message, level) {
+        if (!started) {
+          feed.innerHTML = "";
+          started = true;
+        }
+        const row = document.createElement("div");
+        row.className = "line " + (level || "info");
+        row.textContent = message;
+        feed.appendChild(row);
+        feed.scrollTop = feed.scrollHeight;
       }
 
-      $("execute").addEventListener("change", (e) => {
-        const live = e.target.checked;
-        $("modePill").textContent = live ? "LIVE" : "DRY-RUN";
-        $("modePill").className = "modepill " + (live ? "live" : "dry");
-        $("statusText").textContent = live
-          ? "⚠ Live mode will create real GCP resources in the project."
-          : "Dry-run shows the exact gcloud/helm commands without touching your project.";
-      });
-
       const source = new EventSource("/events");
-      source.onmessage = (m) => {
-        const e = JSON.parse(m.data);
-        if (e.type === "onb_step") setStep(e.key, e.state);
-        if (e.type === "onb_log") logLine(e.text, e.level);
-        if (e.type === "onb_done") {
-          const s = e.summary || {};
+      source.onmessage = (message) => {
+        const event = JSON.parse(message.data);
+        if (event.type === "onb_step") setStep(event.key, event.state);
+        if (event.type === "onb_log") logLine(event.text, event.level);
+        if (event.type === "onb_done") {
+          const summary = event.summary || {};
+          const verify = summary.verification || {};
           const box = $("summary");
-          box.style.display = "block";
-          box.className = (s.status === "completed") ? "" : "warn";
-          const heals = (s.self_heals_applied||[]).join(", ") || "none";
-          const v = s.verification || {};
-          box.innerHTML = `<b>${(s.status||"").toUpperCase()}</b> · mode ${s.mode} · ${ (s.commands_planned||[]).length } commands · self-heals: ${heals}`
-            + `<br/>Dynatrace verify: has_data=<b>${v.has_data}</b>`
-            + (v.logs_30m!=null?` · logs(30m)=${v.logs_30m}`:"")
-            + `<br/><span class="hint">${s.note||""}</span>`;
+          box.classList.remove("hidden");
+          box.textContent = [
+            `status: ${text(summary.status)}`,
+            `mode: ${text(summary.mode)}`,
+            `commands: ${(summary.commands_planned || []).length}`,
+            `self_heals: ${(summary.self_heals_applied || []).join(", ") || "none"}`,
+            `has_data: ${text(verify.has_data)}`,
+            `note: ${text(summary.note)}`,
+          ].join("\n");
           $("goButton").disabled = false;
           $("statusText").textContent = "Done.";
         }
@@ -196,21 +531,42 @@
 
       $("goButton").addEventListener("click", async () => {
         const payload = {
-          project_id: $("project_id").value, dynatrace_url: $("dynatrace_url").value,
-          dynatrace_access_key: $("dynatrace_access_key").value, cluster_name: $("cluster_name").value,
-          region: $("region").value, topic_name: $("topic_name").value,
-          subscription_name: $("subscription_name").value, deployment_type: $("deployment_type").value,
-          log_filter: $("log_filter").value, execute: $("execute").checked,
+          project_id: $("project_id").value.trim(),
+          dynatrace_url: $("dynatrace_url").value.trim(),
+          dynatrace_access_key: $("dynatrace_access_key").value.trim(),
+          cluster_name: $("cluster_name").value.trim(),
+          region: $("region").value.trim(),
+          topic_name: $("topic_name").value.trim(),
+          subscription_name: $("subscription_name").value.trim(),
+          deployment_type: $("deployment_type").value,
+          log_filter: $("log_filter").value.trim(),
+          execute: $("execute").checked,
         };
-        if (!payload.project_id) { $("statusText").textContent = "Project ID is required."; return; }
-        STEPS.forEach(([k]) => setStep(k,""));
-        $("summary").style.display = "none";
-        started = false; feed.innerHTML = '<div class="line hint">Starting…</div>';
+        if (!payload.project_id) {
+          $("statusText").textContent = "Project ID is required.";
+          return;
+        }
+        STEPS.forEach(([key]) => setStep(key, ""));
+        $("summary").classList.add("hidden");
+        started = false;
+        feed.innerHTML = '<div class="line hint">Starting...</div>';
         $("goButton").disabled = true;
-        $("statusText").textContent = payload.execute ? "Running live…" : "Running dry-run…";
-        const r = await (await fetch("/onboard-gke", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) })).json();
-        if (r.status === "error") { $("statusText").textContent = r.detail; $("goButton").disabled = false; }
+        $("statusText").textContent = payload.execute ? "Running live..." : "Running dry-run...";
+        const result = await (await fetch("/onboard-gke", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })).json();
+        if (result.status === "error") {
+          $("statusText").textContent = result.detail;
+          $("goButton").disabled = false;
+        }
       });
+
+      loadEnvironment();
+      loadProjects();
+      loadOnboardingStatus();
+      loadChecks();
     </script>
   </body>
 </html>

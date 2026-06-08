@@ -43,6 +43,7 @@ Built on **Google ADK** (agent runs on **Gemini 3.5 Flash via Vertex AI**) and t
 | `aegis_agent/agent.py` | ADK root agent, deterministic orchestration, ADK Runner path |
 | `aegis_agent/experiment.py` | Deterministic inject→poll→**abort** safety loop |
 | `aegis_agent/dynatrace.py` | Dynatrace MCP client, burn sampler (realtime local SLI + DQL) |
+| `aegis_agent/dynatrace_skills.py` | Curated Dynatrace skill context + post-onboarding DQL checks |
 | `aegis_agent/onboarding/agent.py` | **Single‑click, secure Dynatrace‑on‑GCP onboarding agent** |
 | `aegis_agent/evalagent/` + `tests/` | ADK `AgentEvaluator` + hermetic decision evals + grounding gate |
 | `dashboard/` | Guided‑pipeline UI + SSE + `/onboard`, `/dt-check`, `/run-agent`, `/run-fail` |
@@ -54,6 +55,8 @@ A second ADK agent turns the painful Dynatrace‑on‑GCP setup into one self‑
 enable APIs → store the OTLP token in **GCP Secret Manager** → wire Cloud Run OTLP (delta
 metrics) from the secret → **bridge Cloud Run platform metrics to Dynatrace (no Helm/GKE)**
 → **verify via the Dynatrace MCP**. Auto‑remediates a disabled API and retries.
+Curated Dynatrace skills provide post-onboarding DQL checks for GCP, GKE, logs,
+services, and DAVIS problems without replacing the deterministic `gcloud` tools.
 
 ```bash
 python -m aegis_agent.onboarding.agent \
@@ -81,6 +84,11 @@ RUN_ADK_EVAL=1 pytest tests/test_agent_eval.py        # ADK AgentEvaluator (need
 RUN_GROUNDING_EVAL=1 pytest tests/test_grounding.py   # data-grounding gate
 ```
 
+## Submission
+
+- Devpost packet: `docs/HACKATHON_SUBMISSION.md`
+- Demo video guide: `docs/DEMO_VIDEO_GUIDE.md`
+
 ## Cloud Run
 
 ```bash
@@ -94,3 +102,5 @@ gcloud run deploy aegis-demo-app  --source . --region us-central1 --allow-unauth
 - Secrets live in Secret Manager / env, never in the repo (`.env` is gitignored).
 - On a Dynatrace tenant that retains OTLP, the notebook charts populate and the grounding
   eval goes green with **zero code changes**.
+- GitHub, Google Cloud, and Dynatrace access needed for live operations is listed in
+  `docs/ACCESS_REQUIREMENTS.md`.

@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 from typing import Any
 
 import httpx
@@ -248,7 +249,7 @@ def open_github_pr(
         }
 
     owner, repo = config.github_repo.split("/", 1)
-    branch = f"{branch_hint}-{datetime.now(UTC).strftime('%H%M%S')}"
+    branch = f"{branch_hint}-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3)}"
     headers = {
         "Authorization": f"Bearer {config.github_token}",
         "Accept": "application/vnd.github+json",
@@ -309,6 +310,42 @@ def open_github_pr(
         return {"status": "error", "detail": f"GitHub {code}{hint}", "file_path": target_path}
     except Exception as exc:
         return {"status": "error", "detail": str(exc)[:200], "file_path": target_path}
+
+
+def open_github_issue(
+    title: str,
+    body: str,
+    *,
+    labels: list[str] | None = None,
+    config: AegisConfig | None = None,
+) -> dict[str, Any]:
+    """Open a GitHub issue as a lightweight fallback/reporting artifact."""
+    config = config or get_config()
+    if not config.has_github:
+        return {"status": "dry-run", "title": title, "detail": "GitHub credentials are not configured."}
+
+    owner, repo = config.github_repo.split("/", 1)
+    headers = {
+        "Authorization": f"Bearer {config.github_token}",
+        "Accept": "application/vnd.github+json",
+    }
+    try:
+        with httpx.Client(base_url="https://api.github.com", headers=headers, timeout=30) as client:
+            issue_resp = client.post(
+                f"/repos/{owner}/{repo}/issues",
+                json={"title": title, "body": body, "labels": labels or ["aegis"]},
+            )
+            issue_resp.raise_for_status()
+            issue_json = issue_resp.json()
+        return {"status": "opened", "url": issue_json.get("html_url"), "number": issue_json.get("number")}
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code
+        hint = ""
+        if code == 403:
+            hint = " (the token needs Issues: write on this repo)"
+        return {"status": "error", "detail": f"GitHub {code}{hint}"}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)[:200]}
 
 
 def post_slack(message: str, *, config: AegisConfig | None = None) -> dict[str, Any]:

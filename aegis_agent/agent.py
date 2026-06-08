@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover - depends on ADK version
 
 from .actions import create_dynatrace_notebook
 from .actions import get_service_metrics
+from .actions import open_github_issue
 from .actions import open_github_pr
 from .actions import post_slack
 from .actions import reset_metrics
@@ -28,6 +29,7 @@ from .config import get_config
 from .dynatrace import create_notebook
 from .dynatrace import list_dynatrace_tools
 from .dynatrace import query_dql
+from .dynatrace_skills import build_post_onboarding_queries, get_dynatrace_skill_context
 from .events import event_bus
 from .experiment import run_experiment
 
@@ -350,11 +352,33 @@ def open_hardening_pr(experiment_result: dict[str, Any]) -> dict[str, Any]:
         """
     ).strip()
     result = open_github_pr(title=title, body=body, config=config)
+    if result.get("status") != "opened":
+        issue_body = (
+            f"{body}\n\n"
+            "Aegis could not open the hardening PR automatically.\n\n"
+            f"PR status: {result.get('status')}\n"
+            f"Detail: {result.get('detail', 'n/a')}\n"
+            f"Target file: {result.get('file_path', 'n/a')}\n"
+        )
+        result["fallback_issue"] = open_github_issue(
+            title="Aegis hardening follow-up",
+            body=issue_body,
+            labels=["aegis", "hardening"],
+            config=config,
+        )
     event_bus.publish(
         {
             "type": "reasoning",
             "phase": "harden",
-            "text": f"GitHub hardening action status: {result['status']}.",
+            "text": (
+                f"GitHub hardening PR status: {result['status']}."
+                + (f" Detail: {result.get('detail')}" if result.get("detail") else "")
+                + (
+                    f" Fallback issue: {result['fallback_issue'].get('status')}."
+                    if result.get("fallback_issue")
+                    else ""
+                )
+            ),
         }
     )
     return result
@@ -591,6 +615,17 @@ def run_aegis_game_day(scenario: str = "pass") -> dict[str, Any]:
             "status": pr_result.get("status"),
         }
     )
+    fallback_issue = pr_result.get("fallback_issue") or {}
+    if fallback_issue:
+        event_bus.publish(
+            {
+                "type": "link",
+                "kind": "github_issue",
+                "label": "Hardening issue",
+                "url": fallback_issue.get("url"),
+                "status": fallback_issue.get("status"),
+            }
+        )
 
     notebook = _build_and_publish_notebook(
         context, experiment_result, scorecard, verify_result, verify_scorecard, fix_confirmed, scenario
@@ -735,6 +770,9 @@ INSTRUCTION = dedent(
     If Dynatrace MCP tools are available (e.g. execute_dql, list_problems,
     find_entity_by_name), you may call them to enrich the report with live
     observability data, but never let them gate or replace the deterministic abort.
+
+    For test-case generation, post-onboarding checks, or DQL guidance, use the
+    curated Dynatrace skill helpers. They are read-only context and query builders.
     """
 ).strip()
 
@@ -794,6 +832,8 @@ _AEGIS_TOOLS = [
     FunctionTool(verify_after_fix),
     FunctionTool(post_summary_to_slack),
     FunctionTool(run_aegis_game_day),
+    FunctionTool(get_dynatrace_skill_context),
+    FunctionTool(build_post_onboarding_queries),
 ]
 _dt_toolset = _dynatrace_mcp_toolset()
 if _dt_toolset is not None:
