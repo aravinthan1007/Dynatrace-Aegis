@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from aegis_agent.agent import run_aegis_game_day
 from aegis_agent.agent import run_with_adk
 from aegis_agent.config import get_config
+from aegis_agent.dynatrace_skills import build_post_onboarding_queries
 from aegis_agent.dynatrace import fetch_burn_rate
 from aegis_agent.events import event_bus
 from aegis_agent.onboarding.gke import onboard_gke_autopilot
@@ -29,6 +30,82 @@ config = get_config()
 
 app = FastAPI(title="Aegis Dashboard", version="0.1.0")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def _metadata_value(path: str, timeout: float = 3.0) -> str:
+    md = {"Metadata-Flavor": "Google"}
+    base = "http://metadata.google.internal/computeMetadata/v1"
+    try:
+        with httpx.Client(timeout=timeout) as c:
+            r = c.get(f"{base}/{path}", headers=md)
+            if r.status_code == 200:
+                return r.text.strip()
+    except Exception:
+        return ""
+    return ""
+
+
+def _current_project() -> str:
+    return os.getenv("GOOGLE_CLOUD_PROJECT", "").strip() or _metadata_value("project/project-id")
+
+
+def _current_region() -> str:
+    region = os.getenv("GOOGLE_CLOUD_LOCATION", "").strip()
+    if region and region != "global":
+        return region
+    metadata_region = _metadata_value("instance/region")
+    if metadata_region:
+        return metadata_region.rsplit("/", 1)[-1]
+    return os.getenv("GOOGLE_CLOUD_REGION", "us-central1").strip() or "us-central1"
+
+
+def _github_status() -> dict:
+    target_path = os.getenv("AEGIS_PR_TARGET_PATH", "demo_app/payment_client.py")
+    result = {
+        "configured": config.has_github,
+        "repo": config.github_repo,
+        "base_branch": config.github_base_branch,
+        "target_path": target_path,
+        "repo_read": False,
+        "base_ref_read": False,
+        "target_file_read": False,
+        "permissions": {},
+    }
+    if not config.has_github:
+        result["detail"] = "GITHUB_TOKEN and GITHUB_REPO must be configured."
+        return result
+    try:
+        owner, repo = config.github_repo.split("/", 1)
+    except ValueError:
+        result["detail"] = "GITHUB_REPO must be owner/repo."
+        return result
+    headers = {
+        "Authorization": f"Bearer {config.github_token}",
+        "Accept": "application/vnd.github+json",
+    }
+    try:
+        with httpx.Client(base_url="https://api.github.com", headers=headers, timeout=20) as client:
+            repo_resp = client.get(f"/repos/{owner}/{repo}")
+            result["repo_read"] = repo_resp.status_code == 200
+            if repo_resp.status_code == 200:
+                repo_json = repo_resp.json()
+                result["default_branch"] = repo_json.get("default_branch")
+                result["permissions"] = repo_json.get("permissions") or {}
+            base = config.github_base_branch or result.get("default_branch") or "main"
+            ref_resp = client.get(f"/repos/{owner}/{repo}/git/ref/heads/{base}")
+            result["base_ref_read"] = ref_resp.status_code == 200
+            file_resp = client.get(f"/repos/{owner}/{repo}/contents/{target_path}", params={"ref": base})
+            result["target_file_read"] = file_resp.status_code == 200
+            result["ok"] = result["repo_read"] and result["base_ref_read"] and result["target_file_read"]
+            if not result["ok"]:
+                result["detail"] = (
+                    f"repo={repo_resp.status_code}, ref={ref_resp.status_code}, "
+                    f"target_file={file_resp.status_code}"
+                )
+    except Exception as exc:
+        result["ok"] = False
+        result["detail"] = str(exc)[:200]
+    return result
 
 
 @app.get("/")
@@ -75,16 +152,58 @@ async def health() -> dict:
     }
 
 
+@app.get("/environment-status")
+async def environment_status() -> dict:
+    project = _current_project()
+    service = os.getenv("AEGIS_ONBOARD_SERVICE", "aegis-demo-app")
+    cluster = os.getenv("AEGIS_GKE_CLUSTER", "dynatrace-gcp-monitor")
+    return {
+        "project": project,
+        "region": _current_region(),
+        "service": service,
+        "cluster": cluster,
+        "dashboard_url": config.dashboard_url,
+        "demo_app_url": config.demo_app_url,
+        "dynatrace_environment": config.dt_environment,
+        "dynatrace_configured": config.has_dynatrace,
+        "github": _github_status(),
+        "execution_model": {
+            "gemini_adk": "Gemini ADK selects and calls tools.",
+            "mutations": "Deterministic Python tools run gcloud/GitHub actions.",
+            "default_mode": "GKE onboarding starts as dry-run unless live execution is explicitly selected.",
+        },
+    }
+
+
+@app.get("/github-status")
+async def github_status() -> dict:
+    return await asyncio.to_thread(_github_status)
+
+
+@app.get("/post-onboarding-checks")
+async def post_onboarding_checks() -> dict:
+    project = _current_project()
+    service = os.getenv("AEGIS_ONBOARD_SERVICE", "aegis-demo-app")
+    cluster = os.getenv("AEGIS_GKE_CLUSTER", "dynatrace-gcp-monitor")
+    return build_post_onboarding_queries(
+        project_id=project or "<PROJECT>",
+        cloud_run_service=service,
+        cluster_name=cluster,
+        service_name=service,
+    )
+
+
 def _gcp_list_projects() -> dict:
     """List the project + available GCP projects via the Cloud Run SA (no gcloud)."""
     md = {"Metadata-Flavor": "Google"}
     base = "http://metadata.google.internal/computeMetadata/v1"
-    out: dict = {"projects": [], "current": "", "dt_environment": config.dt_environment,
-                 "region": "us-central1", "services": os.getenv("AEGIS_ONBOARD_SERVICE", "aegis-demo-app")}
+    out: dict = {"projects": [], "current": _current_project(), "dt_environment": config.dt_environment,
+                 "region": _current_region(), "services": os.getenv("AEGIS_ONBOARD_SERVICE", "aegis-demo-app")}
     token = ""
     try:
         with httpx.Client(timeout=5) as c:
-            out["current"] = c.get(f"{base}/project/project-id", headers=md).text.strip()
+            metadata_project = c.get(f"{base}/project/project-id", headers=md).text.strip()
+            out["current"] = out["current"] or metadata_project
             token = c.get(f"{base}/instance/service-accounts/default/token", headers=md).json().get("access_token", "")
     except Exception as exc:
         out["error"] = f"metadata: {exc}"[:160]
@@ -120,7 +239,7 @@ async def onboard_status() -> dict:
     runs via the onboarding agent where gcloud is available; the deployed dashboard
     container has no gcloud, so here we surface the plan + run the live verify.
     """
-    project = os.getenv("GOOGLE_CLOUD_PROJECT", "")
+    project = _current_project()
     service = os.getenv("AEGIS_ONBOARD_SERVICE", "aegis-demo-app")
     plan = [
         {"step": "enable_gcp_apis", "detail": "run, cloudbuild, monitoring, secretmanager, aiplatform"},

@@ -147,7 +147,7 @@
       <button id="runButton">▶ Run Game Day</button>
       <button class="secondary" id="failButton">⚠ Run Fail Scenario</button>
       <button class="secondary" id="approveButton" disabled>✋ Approve Injection</button>
-      <a class="linkchip" href="/onboard" style="margin-left:auto;">☁ Onboard Dynatrace on GKE →</a>
+      <a class="linkchip" href="/onboard" style="margin-left:auto;">Onboarding control</a>
       <span class="hint" id="statusText">Idle — ready to run.</span>
     </div>
 
@@ -193,9 +193,9 @@
 
     <div class="grid" style="padding-top:0;">
       <section class="panel" style="grid-column: 1 / -1;">
-        <div class="panel-header"><h2>Dynatrace × GCP onboarding</h2><span class="hint">single-click • secure (Secret Manager) • self-verifying</span></div>
+        <div class="panel-header"><h2>Dynatrace GCP onboarding</h2><span class="hint">current project status</span></div>
         <div class="panel-body">
-          <button class="secondary" id="onboardBtn">⚙ Onboard Dynatrace on GCP</button>
+          <button class="secondary" id="onboardBtn">Open onboarding control</button>
           <div id="onboardOut" class="hint" style="margin-top:12px; line-height:1.5;"></div>
         </div>
       </section>
@@ -373,16 +373,21 @@
         startGameDay("/run-fail", "Starting FAIL scenario (fix won't hold)…"));
 
       $("onboardBtn").addEventListener("click", () => { window.location.href = "/onboard"; });
-      // Show a quick live verification inline (the dedicated page is at /onboard).
+      // Show current project, GitHub, and Dynatrace readiness inline.
       (async () => {
         try {
+          const env = await (await fetch("/environment-status")).json();
           const d = await (await fetch("/onboard-status")).json();
           const v = d.verify || {};
           const vtxt = v.ok
-            ? `spans_last_15m=${v.spans_last_15m} · has_data=${v.has_data}`
+            ? `spans_last_15m=${v.spans_last_15m} / has_data=${v.has_data}`
             : (v.configured === false ? "Dynatrace not configured" : (v.error || v.detail || "n/a"));
+          const gh = env.github || {};
           $("onboardOut").innerHTML =
-            `Opens the guided onboarding page. Live Dynatrace MCP verify: <b>${vtxt}</b>.`;
+            `Project <b>${env.project || "n/a"}</b> in <b>${env.region || "n/a"}</b>. `
+            + `Service <b>${env.service || "n/a"}</b>. `
+            + `GitHub <b>${gh.ok ? "ready" : "needs attention"}</b> (${gh.repo || "not configured"}). `
+            + `Dynatrace verify: <b>${vtxt}</b>.`;
         } catch (e) { /* leave default */ }
       })();
       $("approveButton").addEventListener("click", async () => {

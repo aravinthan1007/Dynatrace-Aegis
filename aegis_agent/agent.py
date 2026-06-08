@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover - depends on ADK version
 
 from .actions import create_dynatrace_notebook
 from .actions import get_service_metrics
+from .actions import open_github_issue
 from .actions import open_github_pr
 from .actions import post_slack
 from .actions import reset_metrics
@@ -351,11 +352,33 @@ def open_hardening_pr(experiment_result: dict[str, Any]) -> dict[str, Any]:
         """
     ).strip()
     result = open_github_pr(title=title, body=body, config=config)
+    if result.get("status") != "opened":
+        issue_body = (
+            f"{body}\n\n"
+            "Aegis could not open the hardening PR automatically.\n\n"
+            f"PR status: {result.get('status')}\n"
+            f"Detail: {result.get('detail', 'n/a')}\n"
+            f"Target file: {result.get('file_path', 'n/a')}\n"
+        )
+        result["fallback_issue"] = open_github_issue(
+            title="Aegis hardening follow-up",
+            body=issue_body,
+            labels=["aegis", "hardening"],
+            config=config,
+        )
     event_bus.publish(
         {
             "type": "reasoning",
             "phase": "harden",
-            "text": f"GitHub hardening action status: {result['status']}.",
+            "text": (
+                f"GitHub hardening PR status: {result['status']}."
+                + (f" Detail: {result.get('detail')}" if result.get("detail") else "")
+                + (
+                    f" Fallback issue: {result['fallback_issue'].get('status')}."
+                    if result.get("fallback_issue")
+                    else ""
+                )
+            ),
         }
     )
     return result
@@ -592,6 +615,17 @@ def run_aegis_game_day(scenario: str = "pass") -> dict[str, Any]:
             "status": pr_result.get("status"),
         }
     )
+    fallback_issue = pr_result.get("fallback_issue") or {}
+    if fallback_issue:
+        event_bus.publish(
+            {
+                "type": "link",
+                "kind": "github_issue",
+                "label": "Hardening issue",
+                "url": fallback_issue.get("url"),
+                "status": fallback_issue.get("status"),
+            }
+        )
 
     notebook = _build_and_publish_notebook(
         context, experiment_result, scorecard, verify_result, verify_scorecard, fix_confirmed, scenario
