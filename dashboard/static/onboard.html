@@ -78,12 +78,13 @@
       <section class="panel">
         <div class="panel-header"><h2>Onboarding inputs</h2><span class="modepill dry" id="modePill">DRY-RUN</span></div>
         <div class="panel-body">
-          <label>GCP project ID *</label>
-          <input id="project_id" placeholder="my-gcp-project" />
+          <label>GCP project ID * <span class="hint" id="projHint">(loading projects…)</span></label>
+          <input id="project_id" list="projectList" placeholder="loading projects…" />
+          <datalist id="projectList"></datalist>
           <label>Dynatrace URL *</label>
-          <input id="dynatrace_url" placeholder="https://abc12345.live.dynatrace.com" />
-          <label>Dynatrace access token (GCP Services Monitoring scope) *</label>
-          <input id="dynatrace_access_key" type="password" placeholder="dt0c01...." />
+          <input id="dynatrace_url" placeholder="https://abc12345.apps.dynatrace.com" />
+          <label>Dynatrace access token (leave blank to use the configured Secret Manager token)</label>
+          <input id="dynatrace_access_key" type="password" placeholder="blank = use configured token" />
           <div class="row">
             <div><label>New cluster name</label><input id="cluster_name" value="dynatrace-gcp-monitor" /></div>
             <div><label>Region</label><input id="region" value="us-central1" /></div>
@@ -138,6 +139,22 @@
       });
       const setStep = (k,state) => { const el=$("ostep-"+k); if(!el) return;
         el.classList.remove("active","done","failed"); if(state) el.classList.add(state); };
+
+      // Auto-populate available GCP projects + details (Gemini/GCP does the rest).
+      (async () => {
+        try {
+          const d = await (await fetch("/gcp-projects")).json();
+          const dl = $("projectList"); dl.innerHTML = "";
+          (d.projects || []).forEach((p) => { const o = document.createElement("option"); o.value = p; dl.appendChild(o); });
+          if (d.current && !$("project_id").value) $("project_id").value = d.current;
+          if (d.dt_environment && !$("dynatrace_url").value) $("dynatrace_url").value = d.dt_environment;
+          if (d.region) $("region").value = d.region;
+          $("project_id").placeholder = (d.projects && d.projects.length) ? "select or type a project" : "my-gcp-project";
+          $("projHint").textContent = d.error
+            ? "(autopopulate limited: " + d.error + ")"
+            : "(" + ((d.projects || []).length) + " projects found)";
+        } catch (e) { $("projHint").textContent = "(could not list projects)"; }
+      })();
 
       const feed = $("feed");
       let started = false;

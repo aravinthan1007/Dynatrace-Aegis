@@ -7,6 +7,8 @@ import json
 import os
 from pathlib import Path
 
+import httpx
+
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.responses import FileResponse
@@ -71,6 +73,43 @@ async def health() -> dict:
         "github_configured": config.has_github,
         "slack_configured": config.has_slack,
     }
+
+
+def _gcp_list_projects() -> dict:
+    """List the project + available GCP projects via the Cloud Run SA (no gcloud)."""
+    md = {"Metadata-Flavor": "Google"}
+    base = "http://metadata.google.internal/computeMetadata/v1"
+    out: dict = {"projects": [], "current": "", "dt_environment": config.dt_environment,
+                 "region": "us-central1", "services": os.getenv("AEGIS_ONBOARD_SERVICE", "aegis-demo-app")}
+    token = ""
+    try:
+        with httpx.Client(timeout=5) as c:
+            out["current"] = c.get(f"{base}/project/project-id", headers=md).text.strip()
+            token = c.get(f"{base}/instance/service-accounts/default/token", headers=md).json().get("access_token", "")
+    except Exception as exc:
+        out["error"] = f"metadata: {exc}"[:160]
+    if token:
+        try:
+            with httpx.Client(timeout=15) as c:
+                r = c.get(
+                    "https://cloudresourcemanager.googleapis.com/v1/projects",
+                    headers={"Authorization": f"Bearer {token}"},
+                    params={"filter": "lifecycleState:ACTIVE"},
+                )
+            if r.status_code == 200:
+                out["projects"] = [p["projectId"] for p in r.json().get("projects", [])][:50]
+            else:
+                out["error"] = f"resourcemanager {r.status_code}"
+        except Exception as exc:
+            out["error"] = f"resourcemanager: {exc}"[:160]
+    if not out["projects"] and out["current"]:
+        out["projects"] = [out["current"]]
+    return out
+
+
+@app.get("/gcp-projects")
+async def gcp_projects() -> dict:
+    return await asyncio.to_thread(_gcp_list_projects)
 
 
 @app.get("/onboard-status")
