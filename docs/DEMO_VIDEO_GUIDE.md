@@ -2,7 +2,9 @@
 
 Target length: 2:45 to 3:00.
 
-Recommended approach: use real screen recording for the product workflow, then use Google AI video tools only for intro/outro polish if desired.
+Recommended approach for your current plan: generate the full video in Google Vids with Veo 3.1, using the prompts in `docs/AI_VIDEO_PRODUCTION_PACKET.md`.
+
+Keep the claims aligned with the real deployed app. A fully AI-generated video is fine for polish, but the product still must function as described.
 
 ## Tools
 
@@ -84,7 +86,9 @@ Voiceover:
 
 ## AI Video Prompts
 
-Use generated clips sparingly. The core demo should be real screen capture.
+For the complete AI-generated version, start with `docs/AI_VIDEO_PRODUCTION_PACKET.md`.
+
+Use generated clips for the full narrative, but avoid fake secrets, private emails, or claims that the live app cannot demonstrate.
 
 ### Intro Clip Prompt
 
