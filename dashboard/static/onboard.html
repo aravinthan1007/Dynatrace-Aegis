@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aegis — Dynatrace-on-GKE Onboarding</title>
+    <style>
+      :root {
+        --bg: #07131e; --panel: rgba(10, 24, 37, 0.84); --panel-border: rgba(157, 197, 255, 0.16);
+        --text: #e9f2ff; --muted: #93a9bf; --accent: #7be0b7; --accent2: #8cb8ff;
+        --ok: #7be0b7; --bad: #ff6f61; --warn: #f7c948; --fix: #c792ea;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; color: var(--text);
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: radial-gradient(circle at top left, rgba(45,115,255,0.22), transparent 32%),
+          radial-gradient(circle at bottom right, rgba(123,224,183,0.12), transparent 32%),
+          linear-gradient(160deg, #041018 0%, #07131e 45%, #0a1b28 100%); }
+      a { color: var(--accent2); }
+      .topbar { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:18px 24px; border-bottom:1px solid var(--panel-border); }
+      .brand h1 { margin:0; font-size:1.15rem; letter-spacing:0.04em; }
+      .brand p { margin:2px 0 0; color:var(--muted); font-size:0.82rem; }
+      .badge { font-size:0.72rem; padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.05);
+        border:1px solid var(--panel-border); color:var(--muted); }
+      .badge b { color: var(--text); }
+      .grid { display:grid; grid-template-columns: 0.9fr 1.1fr; gap:18px; padding:18px 24px 28px; }
+      @media (max-width: 980px){ .grid { grid-template-columns: 1fr; } }
+      .panel { background:var(--panel); border:1px solid var(--panel-border); border-radius:18px; overflow:hidden; }
+      .panel-header { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.08); }
+      .panel-header h2 { margin:0; font-size:0.92rem; letter-spacing:0.06em; text-transform:uppercase; }
+      .panel-body { padding:16px 18px; }
+      label { display:block; font-size:0.78rem; color:var(--muted); margin:10px 0 4px; }
+      input, select { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--panel-border);
+        background:rgba(255,255,255,0.04); color:var(--text); font-size:0.9rem; }
+      .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .check { display:flex; align-items:center; gap:8px; margin-top:14px; }
+      .check input { width:auto; }
+      .modepill { font-size:0.74rem; padding:4px 10px; border-radius:999px; }
+      .modepill.dry { background:rgba(140,184,255,0.18); color:var(--accent2); }
+      .modepill.live { background:rgba(255,111,97,0.2); color:var(--bad); }
+      button { border:0; border-radius:999px; padding:12px 20px; color:#041018; font-weight:700; cursor:pointer; margin-top:16px;
+        background:linear-gradient(135deg, var(--accent), #a7f3d0); width:100%; }
+      button:disabled { opacity:0.4; cursor:not-allowed; }
+      .steps { display:flex; flex-direction:column; gap:8px; }
+      .step { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px;
+        background:rgba(255,255,255,0.035); border:1px solid var(--panel-border); font-size:0.86rem; }
+      .step .ic { width:18px; height:18px; border-radius:50%; border:2px solid var(--muted); flex:none; }
+      .step.active { border-color:var(--accent2); background:rgba(140,184,255,0.10); }
+      .step.active .ic { border-color:var(--accent2); border-top-color:transparent; animation:spin 0.8s linear infinite; }
+      .step.done .ic { border-color:var(--ok); background:var(--ok); }
+      .step.failed .ic { border-color:var(--bad); background:var(--bad); }
+      @keyframes spin { to { transform: rotate(360deg);} }
+      .feed { height:420px; overflow:auto; font-family:"SFMono-Regular",Consolas,monospace; font-size:0.8rem; line-height:1.5; }
+      .line { padding:2px 0; white-space:pre-wrap; word-break:break-word; }
+      .line.fix { color:var(--fix); font-weight:600; }
+      .line.warn { color:var(--warn); }
+      .line.error { color:var(--bad); }
+      .line.info { color:var(--text); }
+      #summary { display:none; margin-top:12px; padding:12px; border-radius:12px; background:rgba(123,224,183,0.08); border:1px solid var(--panel-border); font-size:0.84rem; }
+      #summary.warn { background:rgba(247,201,72,0.10); }
+      .hint { color:var(--muted); font-size:0.82rem; }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="brand">
+        <h1>Dynatrace-on-GKE Onboarding</h1>
+        <p>Self-healing single-click GCP metric + log integration on a new GKE Autopilot cluster.</p>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+        <span class="badge"><b>Google ADK</b> + Gemini</span>
+        <span class="badge"><b>Dynatrace</b> MCP verify</span>
+        <a class="badge" href="/">← Back to Aegis</a>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <div class="panel-header"><h2>Onboarding inputs</h2><span class="modepill dry" id="modePill">DRY-RUN</span></div>
+        <div class="panel-body">
+          <label>GCP project ID *</label>
+          <input id="project_id" placeholder="my-gcp-project" />
+          <label>Dynatrace URL *</label>
+          <input id="dynatrace_url" placeholder="https://abc12345.live.dynatrace.com" />
+          <label>Dynatrace access token (GCP Services Monitoring scope) *</label>
+          <input id="dynatrace_access_key" type="password" placeholder="dt0c01...." />
+          <div class="row">
+            <div><label>New cluster name</label><input id="cluster_name" value="dynatrace-gcp-monitor" /></div>
+            <div><label>Region</label><input id="region" value="us-central1" /></div>
+          </div>
+          <div class="row">
+            <div><label>Pub/Sub topic</label><input id="topic_name" value="dynatrace-gcp-logs" /></div>
+            <div><label>Subscription</label><input id="subscription_name" value="dynatrace-gcp-logs-sub" /></div>
+          </div>
+          <div class="row">
+            <div><label>Deployment type</label>
+              <select id="deployment_type"><option value="all">all</option><option value="metrics">metrics</option><option value="logs">logs</option></select>
+            </div>
+            <div><label>Log filter (optional)</label><input id="log_filter" placeholder="resource.type=..." /></div>
+          </div>
+          <div class="check">
+            <input type="checkbox" id="execute" />
+            <label for="execute" style="margin:0;">Execute live (creates a billable GKE Autopilot cluster + Pub/Sub). Leave off for a safe dry-run.</label>
+          </div>
+          <button id="goButton">▶ Onboard Dynatrace on GKE</button>
+          <p class="hint" id="statusText">Dry-run shows the exact gcloud/helm commands without touching your project.</p>
+          <div id="summary"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header"><h2>Pipeline &amp; self-healing log</h2><span class="hint">live</span></div>
+        <div class="panel-body">
+          <div class="steps" id="steps"></div>
+          <h2 style="font-size:0.74rem;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;margin:16px 0 8px;">Command &amp; self-heal stream</h2>
+          <div class="feed" id="feed"><div class="line hint">Fill in the form and run to stream progress…</div></div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const STEPS = [
+        ["preflight","Preflight — auth, APIs, CLI tools"],
+        ["iam","Custom IAM role + binding"],
+        ["pubsub","Pub/Sub topic + subscription"],
+        ["logsink","Log export sink"],
+        ["helm_pkg","Download Helm package"],
+        ["values","Write values.yaml"],
+        ["deploy","Create Autopilot cluster + deploy"],
+        ["verify_pods","Verify forwarder pods"],
+        ["verify_dt","Verify GCP data in Dynatrace (MCP)"],
+      ];
+      const stepsEl = $("steps");
+      STEPS.forEach(([k,l]) => {
+        const el = document.createElement("div"); el.className="step"; el.id="ostep-"+k;
+        el.innerHTML = `<span class="ic"></span><span>${l}</span>`; stepsEl.appendChild(el);
+      });
+      const setStep = (k,state) => { const el=$("ostep-"+k); if(!el) return;
+        el.classList.remove("active","done","failed"); if(state) el.classList.add(state); };
+
+      const feed = $("feed");
+      let started = false;
+      function logLine(text, level) {
+        if (!started) { feed.innerHTML=""; started=true; }
+        const d = document.createElement("div"); d.className = "line "+(level||"info"); d.textContent = text;
+        feed.appendChild(d); feed.scrollTop = feed.scrollHeight;
+      }
+
+      $("execute").addEventListener("change", (e) => {
+        const live = e.target.checked;
+        $("modePill").textContent = live ? "LIVE" : "DRY-RUN";
+        $("modePill").className = "modepill " + (live ? "live" : "dry");
+        $("statusText").textContent = live
+          ? "⚠ Live mode will create real GCP resources in the project."
+          : "Dry-run shows the exact gcloud/helm commands without touching your project.";
+      });
+
+      const source = new EventSource("/events");
+      source.onmessage = (m) => {
+        const e = JSON.parse(m.data);
+        if (e.type === "onb_step") setStep(e.key, e.state);
+        if (e.type === "onb_log") logLine(e.text, e.level);
+        if (e.type === "onb_done") {
+          const s = e.summary || {};
+          const box = $("summary");
+          box.style.display = "block";
+          box.className = (s.status === "completed") ? "" : "warn";
+          const heals = (s.self_heals_applied||[]).join(", ") || "none";
+          const v = s.verification || {};
+          box.innerHTML = `<b>${(s.status||"").toUpperCase()}</b> · mode ${s.mode} · ${ (s.commands_planned||[]).length } commands · self-heals: ${heals}`
+            + `<br/>Dynatrace verify: has_data=<b>${v.has_data}</b>`
+            + (v.logs_30m!=null?` · logs(30m)=${v.logs_30m}`:"")
+            + `<br/><span class="hint">${s.note||""}</span>`;
+          $("goButton").disabled = false;
+          $("statusText").textContent = "Done.";
+        }
+      };
+
+      $("goButton").addEventListener("click", async () => {
+        const payload = {
+          project_id: $("project_id").value, dynatrace_url: $("dynatrace_url").value,
+          dynatrace_access_key: $("dynatrace_access_key").value, cluster_name: $("cluster_name").value,
+          region: $("region").value, topic_name: $("topic_name").value,
+          subscription_name: $("subscription_name").value, deployment_type: $("deployment_type").value,
+          log_filter: $("log_filter").value, execute: $("execute").checked,
+        };
+        if (!payload.project_id) { $("statusText").textContent = "Project ID is required."; return; }
+        STEPS.forEach(([k]) => setStep(k,""));
+        $("summary").style.display = "none";
+        started = false; feed.innerHTML = '<div class="line hint">Starting…</div>';
+        $("goButton").disabled = true;
+        $("statusText").textContent = payload.execute ? "Running live…" : "Running dry-run…";
+        const r = await (await fetch("/onboard-gke", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) })).json();
+        if (r.status === "error") { $("statusText").textContent = r.detail; $("goButton").disabled = false; }
+      });
+    </script>
+  </body>
+</html>

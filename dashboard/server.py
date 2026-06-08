@@ -73,8 +73,8 @@ async def health() -> dict:
     }
 
 
-@app.get("/onboard")
-async def onboard_plan() -> dict:
+@app.get("/onboard-status")
+async def onboard_status() -> dict:
     """Onboarding plan + a live Dynatrace MCP verification for the demo service.
 
     Provisioning (enable APIs, Secret Manager, Cloud Run OTLP, infra-metrics bridge)
